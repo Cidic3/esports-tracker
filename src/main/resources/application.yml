@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: esports-tracker
+  datasource:
+    url: jdbc:postgresql://localhost:5432/esportstracker
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate # schema changes go through Flyway migrations, not Hibernate auto-generation
+    show-sql: false
+    open-in-view: false # avoid lazy-loading DB calls inside the view layer; fetch what's needed in the service
+  flyway:
+    enabled: true
+
+pandascore:
+  api-key: ${PANDASCORE_API_KEY}
+  base-url: https://api.pandascore.co
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration-ms: 86400000 # 24h
+
+sync:
+  matches-cron: "0 */15 * * * *"
+  tournaments-cron: "0 0 */6 * * *"
