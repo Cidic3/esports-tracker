@@ -3,6 +3,8 @@
 ## Overview
 A personal esports tracking platform where users select which games and teams they follow, and get a unified dashboard of upcoming tournaments, match scores, schedules, and standings – across multiple esports titles.
 
+**Game scope:** League of Legends and Dota 2 to start. PandaScore (originally planned as the single data source for all titles) restructured its free tier to schedules-only (no scores/standings) at some point after this spec was first written, and CS2/Valorant have no viable official free data source. LoL (Riot's public esports feed) and Dota 2 (Valve's Steam Web API) both have real official APIs with free access to schedules, results, and standings, so the project is scoped to those two for now. More titles can be added later if a legitimate free source turns up for them.
+
 **Purpose:** Portfolio project to demonstrate Spring Boot, REST API design, relational database modeling, external API integration, and testing. Built by a CS student (graduating Sept 2026) to strengthen backend skills for job applications.
 
 **No AI/LLM features.** This is a pure backend project.
@@ -13,6 +15,7 @@ The user is building this project to learn, not just to have it built. In every 
 - Explain the *why* behind architectural and implementation decisions as you make them — what problem the pattern solves, what tradeoffs exist, and why it fits here specifically (not generic textbook explanations).
 - When there are multiple valid approaches, briefly mention the alternative(s) and why the chosen one wins in this context.
 - Favor teaching moments over silently doing the "correct" thing — assume the user wants to be able to explain these decisions themselves later (e.g. in interviews).
+- **Design decisions require explicit confirmation before implementation.** This includes things like: what attributes/fields an entity should have, table/column design, endpoint shapes, which library/pattern to use, etc. Propose the design with your reasoning and options, then wait for the user's go-ahead before writing the code. The user wants to stay the one steering the project's design, not just review it after the fact. Purely mechanical follow-through (e.g. running a build, fixing a compile error) doesn't need this.
 
 ## Tech Stack
 - **Framework:** Spring Boot 3.x (Java 21)
@@ -20,7 +23,7 @@ The user is building this project to learn, not just to have it built. In every 
 - **Database:** PostgreSQL (with Spring Data JPA / Hibernate)
 - **API Documentation:** SpringDoc OpenAPI (Swagger UI)
 - **Testing:** JUnit 5 + Mockito + Spring Boot Test
-- **External Data Source:** PandaScore API (free tier – covers LoL, CS2, Dota 2, Valorant, and more)
+- **External Data Sources:** Riot's public LoL Esports API (League of Legends) + Valve's Steam Web API (Dota 2) — see "External API Integration" below
 - **Migration:** Flyway for database versioning
 - **Optional Frontend:** None initially. The project is API-first – all functionality exposed via REST endpoints. A frontend (React or Thymeleaf) can be added later.
 
@@ -35,7 +38,7 @@ src/main/java/dev/mundorf/esportstracker/
 ├── model/
 │   ├── entity/        # JPA entities
 │   └── dto/           # Request/Response DTOs
-├── client/            # External API clients (PandaScore)
+├── client/            # External API clients (Riot LoL Esports API, Valve Steam Web API)
 ├── config/            # Spring configuration, CORS, Scheduler
 ├── exception/         # Custom exceptions + global handler
 └── mapper/            # Entity <-> DTO mapping
@@ -49,20 +52,24 @@ src/main/java/dev/mundorf/esportstracker/
 - Follows teams (many-to-many)
 
 **Game**
-- id, name, slug (e.g. "league-of-legends", "cs2"), iconUrl
-- Source: seeded from PandaScore
+- id, name, slug (e.g. "league-of-legends", "dota-2"), iconUrl
+- Source: seeded manually (just LoL + Dota 2 for now)
 
 **Team**
-- id, name, slug, logoUrl, game (many-to-one)
-- Source: synced from PandaScore
+- id, name, slug (unique per game), logoUrl, game (many-to-one), externalId (unique per game)
+- Source: synced from Riot (LoL) / Valve (Dota 2)
+
+**League** (a named recurring competition series — LEC, LCK, and also Worlds/MSI/TI, since Riot's actual API structures international events as leagues too, just with `region="INTERNATIONAL"` instead of a country/region name)
+- id, name, slug (unique per game), region (nullable, e.g. "EMEA", "Korea", "INTERNATIONAL"), game (many-to-one), externalId (unique per game)
+- Source: synced from Riot (LoL); sparse/rarely populated for Dota 2, which doesn't have Riot-style recurring franchised leagues
 
 **Tournament**
-- id, name, slug, game (many-to-one), startDate, endDate, tier (S/A/B/C), status (upcoming/running/finished), prizePool
-- Source: synced from PandaScore
+- id, name, slug (unique per game), league (many-to-one, **required** — every tournament has a parent league, matching Riot's real data model where even Worlds/MSI have one), game (many-to-one), startDate, endDate (LocalDate), tier (enum: INTERNATIONAL/PRIMARY/SECONDARY, derived at sync time from `league.region` — INTERNATIONAL region → INTERNATIONAL tier, known majors like LEC/LCK/LPL/LCS → PRIMARY, else SECONDARY — but still stored directly on Tournament for simple indexed filtering rather than joining through League every query), status (upcoming/running/finished), prizePool (nullable, may not be populated depending on what the APIs actually expose), externalId (unique per game)
+- Source: synced from Riot (LoL) / Valve (Dota 2)
 
 **Match**
-- id, tournament (many-to-one), game (many-to-one), teamA (many-to-one), teamB (many-to-one), scheduledAt, status (upcoming/running/finished), scoreA, scoreB, streamUrl
-- Source: synced from PandaScore
+- id, tournament (many-to-one), game (many-to-one), teamA (many-to-one), teamB (many-to-one), scheduledAt (Instant), status (upcoming/running/finished, shared enum with Tournament.status), scoreA, scoreB (nullable until finished), streamUrl, externalId (unique per game)
+- Source: synced from Riot (LoL) / Valve (Dota 2)
 
 **Standing** (per tournament)
 - id, tournament (many-to-one), team (many-to-one), rank, wins, losses, draws
@@ -106,32 +113,36 @@ GET    /api/matches/{id}           – Match details
 GET    /api/feed                   – Combined feed: upcoming matches + running tournaments for followed games/teams (auth required)
 ```
 
-### External API Integration – PandaScore
+### External API Integration
 
-**Base URL:** `https://api.pandascore.co/`
-**Auth:** Bearer token (API key from free tier)
-**Rate Limit:** 1 request/second on free tier
+Two separate clients instead of one unified provider, since LoL and Dota 2 come from different companies with different API shapes. Each implements the same conceptual contract (fetch leagues/tournaments, fetch schedule, fetch standings) so the sync scheduler and mapper layer can treat them uniformly even though the wire formats differ.
 
-Key endpoints to consume:
-- `GET /videogames` – list supported games
-- `GET /{game}/teams` – teams per game
-- `GET /{game}/tournaments` – tournaments per game
-- `GET /{game}/matches` – matches per game (upcoming, running, past)
-- `GET /tournaments/{id}/standings` – standings
+**LoL Esports API (Riot)**
+- **Base URL:** `https://esports-api.lolesports.com/persisted/gw/`
+- **Auth:** `x-api-key` header. Not a secret Riot ever tried to protect — the same key value is hardcoded client-side by lolesports.com itself and documented across dozens of open-source projects — but it's still stored as `${RIOT_ESPORTS_API_KEY}`, not hardcoded, so it can be swapped if Riot ever rotates it.
+- **Rate limit:** undocumented/unofficial API, no published limit — poll conservatively regardless.
+- Key endpoints: `getLeagues`, `getSchedule` (params: `leagueId`), `getTournamentsForLeague`, `getStandings`, `getEventDetails`, `getCompletedEvents`
+
+**Dota 2 Steam Web API (Valve)**
+- **Base URL:** `https://api.steampowered.com/IDOTA2Match_570/`
+- **Auth:** `key` query parameter — a free personal Steam API key from steamcommunity.com/dev/apikey
+- **Rate limit:** no officially published limit for this endpoint group; poll conservatively
+- Key endpoints: `GetLiveLeagueGames`, `GetMatchHistory`, `GetLeagueListing`, `GetMatchDetails`
 
 **Sync Strategy:**
-- Use `@Scheduled` Spring tasks to periodically poll PandaScore
+- Use `@Scheduled` Spring tasks to periodically poll both APIs
 - Tournaments/teams: sync every 6 hours
 - Matches (upcoming/running): sync every 15 minutes
-- Store PandaScore IDs alongside internal IDs for deduplication
-- Never expose PandaScore data directly – always map to internal entities
+- Store each provider's external ID alongside internal IDs for deduplication (see Database Schema Notes)
+- Never expose Riot/Valve response payloads directly – always map to internal entities
 
 ### Database Schema Notes
 - All entities use auto-generated UUIDs as primary keys
-- Store `pandascoreId` (Long) on Game, Team, Tournament, Match for sync deduplication
+- `externalId` (String) on League, Team, Tournament, Match for sync deduplication against Riot/Valve — a single string column rather than separate typed columns per provider, since Riot serializes its IDs as strings anyway (they're 64-bit values large enough to lose precision as JS numbers) and Valve's numeric IDs store fine as their string form too. Each entity already has exactly one provider (via its `game`), so no separate provider column is needed
+- `slug` and `externalId` are unique **per game** (`UNIQUE (game_id, ...)`), not globally unique — Riot's and Valve's ID/name spaces are independent, so the same raw value could coincidentally appear in both without meaning anything
 - Use `@CreatedDate` and `@LastModifiedDate` on all entities
 - Flyway migrations in `src/main/resources/db/migration/`
-- Index: match.scheduledAt, match.status, tournament.status, team.game_id
+- Index: match.scheduledAt, match.status, tournament.status, team.game_id, tournament.league_id
 
 ### Testing Strategy
 - **Unit tests:** Service layer with mocked repositories
@@ -157,7 +168,7 @@ Key endpoints to consume:
 
 ### Phase 2 – Core Data
 6. Add Team, Tournament, Match entities + migrations
-7. Implement PandaScore client (RestTemplate or WebClient)
+7. Implement Riot LoL Esports client + Valve Dota 2 Steam Web API client (RestTemplate or WebClient)
 8. Build sync scheduler for games and teams
 9. Implement Tournament and Match endpoints
 10. Write tests for sync logic and endpoints
@@ -192,9 +203,13 @@ spring:
   flyway:
     enabled: true
 
-pandascore:
-  api-key: ${PANDASCORE_API_KEY}
-  base-url: https://api.pandascore.co
+riot:
+  esports-api-key: ${RIOT_ESPORTS_API_KEY}
+  base-url: https://esports-api.lolesports.com/persisted/gw
+
+steam:
+  api-key: ${STEAM_API_KEY}
+  base-url: https://api.steampowered.com/IDOTA2Match_570
 
 jwt:
   secret: ${JWT_SECRET}
@@ -205,8 +220,9 @@ sync:
   tournaments-cron: "0 0 */6 * * *"   # every 6 hours
 ```
 
-## PandaScore API Key
-Register for free at https://pandascore.co/ – the free tier gives 1000 requests/hour, more than enough for development and a portfolio demo.
+## External API Keys
+- **Riot LoL Esports API:** no registration needed — uses the long-standing public key `0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z`, the same one lolesports.com's own frontend uses. Still kept in `RIOT_ESPORTS_API_KEY` rather than hardcoded, in case Riot ever rotates it.
+- **Valve Steam Web API:** free personal key at https://steamcommunity.com/dev/apikey (requires a Steam account).
 
 ## Git Strategy
 - Main branch: `main` (always deployable)

@@ -8,7 +8,7 @@ design, relational database modeling, external API integration, and testing. See
 
 - Java 21 (JDK)
 - PostgreSQL running locally (or via Docker)
-- A [PandaScore](https://pandascore.co/) API key (free tier)
+- A free [Steam Web API key](https://steamcommunity.com/dev/apikey) (for Dota 2 data)
 
 No local Maven install is required - this project uses the Maven Wrapper.
 
@@ -17,7 +17,8 @@ No local Maven install is required - this project uses the Maven Wrapper.
 ```bash
 export DB_USERNAME=your_db_user
 export DB_PASSWORD=your_db_password
-export PANDASCORE_API_KEY=your_pandascore_key
+export RIOT_ESPORTS_API_KEY=0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z
+export STEAM_API_KEY=your_steam_api_key
 export JWT_SECRET=a-long-random-secret-string
 
 ./mvnw spring-boot:run
