@@ -12,10 +12,20 @@ spring:
     open-in-view: false # avoid lazy-loading DB calls inside the view layer; fetch what's needed in the service
   flyway:
     enabled: true
+  mvc:
+    problemdetails:
+      enabled: true # RFC 7807 bodies for built-in errors (e.g. @Valid failures), consistent with our custom exception handlers
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: false # external API responses (Riot/Valve) can add fields over time; our DTOs only map what we use
 
-pandascore:
-  api-key: ${PANDASCORE_API_KEY}
-  base-url: https://api.pandascore.co
+riot:
+  esports-api-key: ${RIOT_ESPORTS_API_KEY}
+  base-url: https://esports-api.lolesports.com/persisted/gw
+
+steam:
+  api-key: ${STEAM_API_KEY}
+  base-url: https://api.steampowered.com/IDOTA2Match_570
 
 jwt:
   secret: ${JWT_SECRET}
