@@ -2,6 +2,7 @@ package dev.mundorf.esportstracker.client.riot;
 
 import dev.mundorf.esportstracker.client.riot.dto.RiotLeague;
 import dev.mundorf.esportstracker.client.riot.dto.RiotScheduleEvent;
+import dev.mundorf.esportstracker.client.riot.dto.RiotStandingEntry;
 import dev.mundorf.esportstracker.client.riot.dto.RiotTournament;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
@@ -49,6 +50,25 @@ class RiotEsportsClientLiveIT {
 
         assertThat(events).isNotEmpty();
         assertThat(events.get(0).league().slug()).isEqualTo("lec");
+    }
+
+    @Test
+    void shouldFetchStandingsForAFinishedLecSplit() {
+        String lecId = findLeagueId("lec");
+        String tournamentId = client.getTournamentsForLeague(lecId).stream()
+                .filter(t -> t.slug().contains("split_2_2026") || t.slug().contains("summer_2025"))
+                .findFirst()
+                .orElseThrow()
+                .id();
+
+        List<RiotStandingEntry> entries = client.getStandings(tournamentId);
+
+        assertThat(entries).isNotEmpty();
+        assertThat(entries).allSatisfy(entry -> {
+            assertThat(entry.groupName()).isNotBlank();
+            assertThat(entry.rank()).isPositive();
+            assertThat(entry.team().id()).isNotBlank();
+        });
     }
 
     private String findLeagueId(String slug) {

@@ -56,6 +56,18 @@ public interface TournamentRepository extends JpaRepository<Tournament, UUID> {
                                                   @Param("horizon") LocalDate horizon);
 
     /**
+     * Tournaments active now or starting within the horizon window - same "in-season" scoping as
+     * {@link #findLeaguesWithActiveTournaments}, but returning the tournaments themselves (with
+     * their externalId) rather than just the parent league, since standings sync is per-tournament.
+     */
+    @Query("""
+            SELECT t FROM Tournament t
+            WHERE t.startDate <= :horizon AND t.endDate >= :today
+            """)
+    List<Tournament> findActiveTournaments(@Param("today") LocalDate today,
+                                           @Param("horizon") LocalDate horizon);
+
+    /**
      * Running tournaments for a user's followed games/teams (a followed team qualifies via any of its
      * currently scheduled matches in the tournament). Same empty-set caveat as
      * {@link MatchRepository#findUpcomingForFollowed}: callers must never pass an empty set.

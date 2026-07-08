@@ -17,7 +17,7 @@ A personal esports tracking platform where users select which games and teams th
 
 **Phase 3 (Personalization) — done.** `User.followedGames`/`followedTeams` (many-to-many, full-replace semantics) + migrations V10/V11, `PUT /api/users/me/games`/`teams` (validates slugs/ids exist before replacing), `GET /api/matches/upcoming` and `GET /api/feed` (both query by followed games/teams with OR semantics, using a placeholder-UUID trick to keep `IN (...)` clauses non-empty), all auth-required. 79 tests (up from 64), plus manual end-to-end verification against real synced Riot data (register → login → follow → upcoming/feed → 401/404/400 edge cases all confirmed).
 
-**Phase 4 (Polish) — not started**, except pagination (step 15), which was pulled forward into Phase 2's Tournament/Match endpoints rather than deferred, and RFC 7807 error handling (step 18), which has been in place since Phase 1. Swagger/OpenAPI dependency is present in `pom.xml` but not yet verified/customized. `Standing` entity/endpoint/sync do not exist yet.
+**Phase 4 (Polish) — partially started.** Standings (step 17) done: `Standing` entity/migration (V12), `RiotEsportsClient.getStandings`, `RiotSyncService.syncStandings`, `GET /api/tournaments/{id}/standings`. 83 tests (up from 79), verified end-to-end against real Riot data (e.g. LEC Split 2 2026's finished regular-season table matches Riot's response exactly). Pagination (step 15) was pulled forward into Phase 2's Tournament/Match endpoints rather than deferred, and RFC 7807 error handling (step 18) has been in place since Phase 1. Swagger/OpenAPI dependency is present in `pom.xml` but not yet verified/customized. Dota 2/Steam is intentionally out of scope for now (LoL-only working version first).
 
 **Still not done from Phase 3's scope:** `RiotSyncService.syncMatches()` is still scoped to "in-season" leagues (a tournament active or starting within 14 days) rather than user-follow-driven, as originally planned once the follow model existed. Revisit this now that follows are built.
 
@@ -90,8 +90,12 @@ A Steam/Dota 2 client would live at `client/steam/` following the same pattern o
 - id, tournament (many-to-one), game (many-to-one), teamA (many-to-one), teamB (many-to-one), scheduledAt (Instant), status (upcoming/running/finished, shared enum with Tournament.status), scoreA, scoreB (nullable until finished), streamUrl, externalId (unique per game)
 - Source: synced from Riot (LoL) / Valve (Dota 2)
 
-**Standing** (per tournament) — **not built yet, Phase 4.** Field list below is a starting proposal, not confirmed — revisit design (per the confirm-before-implementing rule above) when actually building it.
-- id, tournament (many-to-one), team (many-to-one), rank, wins, losses, draws
+**Standing** (a team's position within one ranked table of a tournament)
+- id, tournament (many-to-one), team (many-to-one), groupName (String — Riot's section name, e.g. "Regular Season"; disambiguates tournaments with more than one ranked table), rank (Riot's ordinal; ties share a rank), wins, losses
+- No `draws` field (dropped from the original tentative proposal — LoL is best-of-series, never a draw)
+- No `externalId` — unlike League/Team/Tournament/Match, a Riot ranking is a derived aggregate with no stable id of its own; upserts key off `UNIQUE(tournament_id, team_id, group_name)` instead
+- Bracket/playoff stages have no win-loss table (Riot returns an empty ranking list for them) and are never represented here — see Match for bracket data instead
+- Source: synced from Riot (LoL) via `getStandings`, piggybacking on the same 15-min cadence and "in-season" tournament scope as match sync
 
 ### REST Endpoints
 
@@ -110,11 +114,12 @@ GET    /api/games                  – List all supported games                 
 GET    /api/games/{slug}           – Get game details                                      [built]
 ```
 
-**Tournaments** — all paginated (`page`/`size`/`sort` query params, `PagedResponse` envelope)
+**Tournaments** — list/detail/matches paginated (`page`/`size`/`sort` query params, `PagedResponse` envelope); standings is not, since a group table is always small
 ```
 GET    /api/tournaments            – List (filter: game, status, tier)                     [built]
-GET    /api/tournaments/{id}       – Tournament details                                    [built, no standings yet]
+GET    /api/tournaments/{id}       – Tournament details                                    [built]
 GET    /api/tournaments/{id}/matches – Matches in a tournament, paginated                   [built]
+GET    /api/tournaments/{id}/standings – Standings for a tournament, by group then rank     [built]
 ```
 
 **Matches** — list/detail/today paginated where applicable
@@ -141,7 +146,7 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 - **Auth:** `x-api-key` header. Not a secret Riot ever tried to protect — the same key value is hardcoded client-side by lolesports.com itself and documented across dozens of open-source projects — but it's still stored as `${RIOT_ESPORTS_API_KEY}`, not hardcoded, so it can be swapped if Riot ever rotates it.
 - **Rate limit:** undocumented/unofficial API, no published limit — poll conservatively regardless.
 - Endpoints actually used: `getLeagues`, `getTournamentsForLeague`, `getSchedule` (params: `leagueId`), `getEventDetails` (resolves the authoritative tournament ID + stable team IDs that `getSchedule` alone doesn't expose)
-- Not yet used: `getStandings` (Phase 4), `getCompletedEvents`
+- Not yet used: `getCompletedEvents`
 
 **Dota 2 Steam Web API (Valve) — NOT implemented.** Config placeholders exist (`steam.api-key`, `steam.base-url`) but no client, no DTOs, no sync. Blocked on the user registering a free Steam API key. When built, follow the same pattern as `client/riot/`.
 - **Base URL:** `https://api.steampowered.com/IDOTA2Match_570/`
@@ -203,7 +208,7 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 ### Phase 4 – Polish
 15. ✅ done — filtering/pagination already built into the Tournament/Match endpoints (Phase 2 step 9), pulled forward rather than deferred
 16. Add Swagger/OpenAPI documentation — dependency present in `pom.xml`, not yet configured/verified
-17. Add standings sync and endpoint — needs its own design/confirmation pass (Standing entity fields aren't finalized, see Core Entities above)
+17. ✅ Add standings sync and endpoint — 83 tests total (up from 79), plus manual + live-IT verification against real Riot data (see Current Progress above)
 18. ✅ done — `GlobalExceptionHandler` + RFC 7807 `ProblemDetail` responses have been in place since Phase 1, refined incrementally (404/409/401 handlers added as each feature needed them)
 19. Write integration tests — the `*LiveIT` tests (see Testing Strategy) partially cover this; broader `@SpringBootTest` integration coverage not yet done
 20. Clean up README with setup instructions, API examples, architecture diagram — basic run instructions exist in README.md, API examples/architecture diagram not yet added

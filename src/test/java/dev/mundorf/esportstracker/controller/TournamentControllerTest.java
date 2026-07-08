@@ -2,17 +2,20 @@ package dev.mundorf.esportstracker.controller;
 
 import dev.mundorf.esportstracker.exception.ResourceNotFoundException;
 import dev.mundorf.esportstracker.mapper.MatchMapper;
+import dev.mundorf.esportstracker.mapper.StandingMapper;
 import dev.mundorf.esportstracker.mapper.TeamMapper;
 import dev.mundorf.esportstracker.mapper.TournamentMapper;
 import dev.mundorf.esportstracker.model.entity.EventStatus;
 import dev.mundorf.esportstracker.model.entity.Game;
 import dev.mundorf.esportstracker.model.entity.League;
 import dev.mundorf.esportstracker.model.entity.Match;
+import dev.mundorf.esportstracker.model.entity.Standing;
 import dev.mundorf.esportstracker.model.entity.Team;
 import dev.mundorf.esportstracker.model.entity.Tournament;
 import dev.mundorf.esportstracker.model.entity.TournamentTier;
 import dev.mundorf.esportstracker.security.JwtAuthenticationFilter;
 import dev.mundorf.esportstracker.service.MatchService;
+import dev.mundorf.esportstracker.service.StandingService;
 import dev.mundorf.esportstracker.service.TournamentService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,7 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtAuthenticationFilter.class)
 )
 @AutoConfigureMockMvc(addFilters = false)
-@Import({TournamentMapper.class, MatchMapper.class, TeamMapper.class})
+@Import({TournamentMapper.class, MatchMapper.class, TeamMapper.class, StandingMapper.class})
 class TournamentControllerTest {
 
     @Autowired
@@ -55,6 +58,8 @@ class TournamentControllerTest {
     private TournamentService tournamentService;
     @MockBean
     private MatchService matchService;
+    @MockBean
+    private StandingService standingService;
 
     private final Game lolGame = new Game("League of Legends", "league-of-legends", null);
     private final League lec = new League("LEC", "lec", "EMEA", lolGame, "L1");
@@ -118,5 +123,24 @@ class TournamentControllerTest {
                 .andExpect(jsonPath("$.content[0].teamA.name").value("G2 Esports"))
                 .andExpect(jsonPath("$.content[0].teamB.name").value("Fnatic"))
                 .andExpect(jsonPath("$.content[0].scoreA").value(3));
+    }
+
+    @Test
+    void shouldListStandingsForTournament() throws Exception {
+        UUID tournamentId = UUID.randomUUID();
+        Tournament tournament = new Tournament("LEC Split 2 2026", "lec_split_2_2026", lec, lolGame,
+                LocalDate.now().minusDays(30), LocalDate.now().plusDays(30),
+                TournamentTier.PRIMARY, EventStatus.RUNNING, null, "T4");
+        Team team = new Team("G2 Esports", "g2-esports", null, lolGame, "TA");
+        Standing standing = new Standing(tournament, team, "Regular Season", 1, 8, 1);
+        when(standingService.findByTournament(tournamentId)).thenReturn(List.of(standing));
+
+        mockMvc.perform(get("/api/tournaments/{id}/standings", tournamentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].groupName").value("Regular Season"))
+                .andExpect(jsonPath("$[0].rank").value(1))
+                .andExpect(jsonPath("$[0].wins").value(8))
+                .andExpect(jsonPath("$[0].losses").value(1))
+                .andExpect(jsonPath("$[0].team.name").value("G2 Esports"));
     }
 }
