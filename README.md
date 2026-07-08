@@ -94,8 +94,12 @@ list).
 
 ## API tour
 
-A typical end-to-end flow, in curl. All endpoints return `application/json`, with `Problem+JSON`
-(RFC 7807) shapes for errors.
+Interactive docs are also live at <http://localhost:8080/swagger-ui.html> once the app is
+running (raw OpenAPI 3 JSON at `/v3/api-docs`). The JWT-protected endpoints are marked with a
+lock icon; click **Authorize** and paste the token from `/api/auth/login` to try them from the
+UI. A typical end-to-end flow, in curl:
+
+All endpoints return `application/json`, with `Problem+JSON` (RFC 7807) shapes for errors.
 
 ### Public: browse tournaments and matches
 

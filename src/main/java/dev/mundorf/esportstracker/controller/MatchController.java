@@ -6,6 +6,7 @@ import dev.mundorf.esportstracker.model.dto.PagedResponse;
 import dev.mundorf.esportstracker.model.entity.EventStatus;
 import dev.mundorf.esportstracker.service.MatchService;
 import dev.mundorf.esportstracker.service.UserService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -56,6 +57,7 @@ public class MatchController {
     }
 
     @GetMapping("/upcoming")
+    @SecurityRequirement(name = "bearer-jwt")
     public PagedResponse<MatchResponse> upcoming(
             @AuthenticationPrincipal UserDetails userDetails,
             @PageableDefault(size = 20, sort = "scheduledAt", direction = Sort.Direction.ASC) Pageable pageable) {

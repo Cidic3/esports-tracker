@@ -5,6 +5,7 @@ import dev.mundorf.esportstracker.model.dto.FollowGamesRequest;
 import dev.mundorf.esportstracker.model.dto.FollowTeamsRequest;
 import dev.mundorf.esportstracker.model.dto.UserResponse;
 import dev.mundorf.esportstracker.service.UserService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/users")
+@SecurityRequirement(name = "bearer-jwt")
 public class UserController {
 
     private final UserService userService;

@@ -7,6 +7,7 @@ import dev.mundorf.esportstracker.model.entity.User;
 import dev.mundorf.esportstracker.service.MatchService;
 import dev.mundorf.esportstracker.service.TournamentService;
 import dev.mundorf.esportstracker.service.UserService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/feed")
+@SecurityRequirement(name = "bearer-jwt")
 public class FeedController {
 
     // Dashboard glance, not a full listing - /api/matches/upcoming and /api/tournaments?status=RUNNING
