@@ -40,4 +40,15 @@ public class RiotSyncScheduler {
             log.error("Scheduled match sync failed", ex);
         }
     }
+
+    // Standings only change once a match completes, so this piggybacks on the same cadence and
+    // "in-season" scope as the match sync above rather than running on its own schedule.
+    @Scheduled(cron = "${sync.matches-cron}")
+    public void scheduledStandingsSync() {
+        try {
+            syncService.syncStandings();
+        } catch (ExternalApiException ex) {
+            log.error("Scheduled standings sync failed", ex);
+        }
+    }
 }

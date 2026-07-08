@@ -46,8 +46,16 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/games/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/tournaments/**").permitAll()
+                        // Order matters: this specific match must be declared before the /api/matches/**
+                        // permitAll below, since Spring Security uses first-match-wins.
+                        .requestMatchers(HttpMethod.GET, "/api/matches/upcoming").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/matches/**").permitAll()
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/api/feed").authenticated()
+                        // Springdoc paths: /swagger-ui/** covers the UI assets but NOT the top-level
+                        // /swagger-ui.html entry point; likewise /v3/api-docs/** covers grouped docs
+                        // but NOT the bare /v3/api-docs JSON. Enumerate both so hitting either works.
+                        .requestMatchers("/swagger-ui.html", "/swagger-ui/**",
+                                "/v3/api-docs", "/v3/api-docs/**").permitAll()
                         // Permit the error dispatch, else an exception in any handler gets re-dispatched
                         // to /error, blocked by anyRequest().authenticated(), and masked as a 401.
                         .requestMatchers("/error").permitAll()

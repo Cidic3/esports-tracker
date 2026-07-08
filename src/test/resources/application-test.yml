@@ -1,0 +1,20 @@
+# Test profile: an in-memory H2 in PostgreSQL-compat mode so tests don't need a live Postgres
+# container. Flyway still runs the real V1-V12 migrations against it, which exercises the
+# actual production schema; `ddl-auto: validate` (inherited from application.yml) then makes
+# sure our @Entity classes still map cleanly against that Flyway-produced schema. If we ever
+# introduce Postgres-specific SQL (JSONB, custom types), swap this for Testcontainers.
+spring:
+  datasource:
+    url: jdbc:h2:mem:esportstracker_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+# Env vars normally required by application.yml - stub them out with harmless test values so
+# any @SpringBootTest-based test doesn't need real secrets to boot the context.
+riot:
+  esports-api-key: test-key
+steam:
+  api-key: test-key
+jwt:
+  # HS384 requires a >= 48-byte secret; long-enough placeholder that's obviously not a real key.
+  secret: test-secret-not-a-real-jwt-signing-key-just-for-tests-1234567890

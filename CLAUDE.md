@@ -15,13 +15,13 @@ A personal esports tracking platform where users select which games and teams th
 
 **Phase 2 (Core Data) — done.** League/Team/Tournament/Match entities + migrations, `RiotEsportsClient` (LoL only — Dota 2/Steam client is not built, only config placeholders exist), `RiotSyncService` + scheduler polling live Riot data, Tournament/Match REST endpoints (paginated), 64 tests. Verified end-to-end against real Riot data (42 leagues, 488+ tournaments, growing match history).
 
-**Phase 3 (Personalization) — not started.** User follows (games/teams), `/api/feed`, `/api/matches/upcoming`, `PUT /api/users/me/games`/`teams`.
+**Phase 3 (Personalization) — done.** `User.followedGames`/`followedTeams` (many-to-many, full-replace semantics) + migrations V10/V11, `PUT /api/users/me/games`/`teams` (validates slugs/ids exist before replacing), `GET /api/matches/upcoming` and `GET /api/feed` (both query by followed games/teams with OR semantics, using a placeholder-UUID trick to keep `IN (...)` clauses non-empty), all auth-required. 79 tests (up from 64), plus manual end-to-end verification against real synced Riot data (register → login → follow → upcoming/feed → 401/404/400 edge cases all confirmed).
 
-**Phase 4 (Polish) — not started**, except pagination (step 15), which was pulled forward into Phase 2's Tournament/Match endpoints rather than deferred, and RFC 7807 error handling (step 18), which has been in place since Phase 1. Swagger/OpenAPI dependency is present in `pom.xml` but not yet verified/customized. `Standing` entity/endpoint/sync do not exist yet.
+**Phase 4 (Polish) — done for the LoL-only baseline.** Standings (step 17): `Standing` entity/migration (V12), `RiotEsportsClient.getStandings`, `RiotSyncService.syncStandings`, `GET /api/tournaments/{id}/standings`. Broader integration tests (step 19): `@DataJpaTest` coverage for the three custom queries with real Flyway-driven schema, plus one full-stack `@SpringBootTest` (`FeedFlowIntegrationTest`) exercising register → login → follow → feed end-to-end. 88 tests (up from 79). Pagination (step 15) was pulled forward into Phase 2's Tournament/Match endpoints. RFC 7807 error handling (step 18) has been in place since Phase 1. README polish (step 20): full portfolio-oriented rewrite with architecture diagram, curl walkthrough, endpoint reference, design-decisions section. Swagger/OpenAPI (step 16): `OpenApiConfig` + JWT bearer security scheme, JWT-protected endpoints annotated with `@SecurityRequirement(name = "bearer-jwt")` so Swagger UI shows a lock icon and the "Authorize" button just on those; Swagger UI live at `/swagger-ui.html`, OpenAPI JSON at `/v3/api-docs`. Dota 2/Steam is intentionally out of scope for now (LoL-only working version first).
 
-**Also decided, not yet built:** match-sync polling is currently scoped to "in-season" leagues (a tournament active or starting within 14 days) rather than user-follow-driven — the user wants this to eventually be driven by what users actually follow instead, once Phase 3's follow model exists. Revisit `RiotSyncService.syncMatches()` when building follows.
+**Decision (2026-07-08):** the earlier plan to make `RiotSyncService.syncMatches()` follow-driven has been **rejected**. Sync stays in-season-scoped; user follows are a *read-time filter* over the fully-synced dataset (which is how `/api/feed` and `/api/matches/upcoming` already work), not a driver of the poll cadence. Reasons: poll cost stays bounded by the number of active tournaments instead of scaling with users, and every user reads from the same fresh cache instead of each follow triggering its own staleness. The "still not done" note this replaces was left over from an earlier design that made less sense as the follow model landed.
 
-**Known gaps worth knowing about:** no `@DataJpaTest` repository tests exist yet (Testing Strategy below mentions them as a target). `GET /api/games/{slug}/teams` and `/api/games/{slug}/tournaments` were deliberately skipped as redundant with the filtered list endpoints (`/api/tournaments?game=`, etc.) — revisit only if a more RESTful nested-resource style is wanted later.
+**Known gaps worth knowing about:** `GET /api/games/{slug}/teams` and `/api/games/{slug}/tournaments` were deliberately skipped as redundant with the filtered list endpoints (`/api/tournaments?game=`, etc.) — revisit only if a more RESTful nested-resource style is wanted later.
 
 ## Working With Claude
 The user is building this project to learn, not just to have it built. In every session:
@@ -65,10 +65,10 @@ A Steam/Dota 2 client would live at `client/steam/` following the same pattern o
 
 ### Core Entities
 
-**User** — follows relations are **Phase 3, not built yet**; only the base fields exist today
+**User**
 - id, username, email, passwordHash, createdAt
-- Follows games (many-to-many) — planned
-- Follows teams (many-to-many) — planned
+- Follows games (many-to-many, `user_followed_games`, full-replace semantics via `replaceFollowedGames`)
+- Follows teams (many-to-many, `user_followed_teams`, full-replace semantics via `replaceFollowedTeams`)
 
 **Game**
 - id, name, slug (e.g. "league-of-legends", "dota-2"), iconUrl
@@ -90,18 +90,22 @@ A Steam/Dota 2 client would live at `client/steam/` following the same pattern o
 - id, tournament (many-to-one), game (many-to-one), teamA (many-to-one), teamB (many-to-one), scheduledAt (Instant), status (upcoming/running/finished, shared enum with Tournament.status), scoreA, scoreB (nullable until finished), streamUrl, externalId (unique per game)
 - Source: synced from Riot (LoL) / Valve (Dota 2)
 
-**Standing** (per tournament) — **not built yet, Phase 4.** Field list below is a starting proposal, not confirmed — revisit design (per the confirm-before-implementing rule above) when actually building it.
-- id, tournament (many-to-one), team (many-to-one), rank, wins, losses, draws
+**Standing** (a team's position within one ranked table of a tournament)
+- id, tournament (many-to-one), team (many-to-one), groupName (String — Riot's section name, e.g. "Regular Season"; disambiguates tournaments with more than one ranked table), rank (Riot's ordinal; ties share a rank), wins, losses
+- No `draws` field (dropped from the original tentative proposal — LoL is best-of-series, never a draw)
+- No `externalId` — unlike League/Team/Tournament/Match, a Riot ranking is a derived aggregate with no stable id of its own; upserts key off `UNIQUE(tournament_id, team_id, group_name)` instead
+- Bracket/playoff stages have no win-loss table (Riot returns an empty ranking list for them) and are never represented here — see Match for bracket data instead
+- Source: synced from Riot (LoL) via `getStandings`, piggybacking on the same 15-min cadence and "in-season" tournament scope as match sync
 
 ### REST Endpoints
 
-**Auth & Users** — register/login/me built (Phase 1); the two PUT routes are Phase 3, not built yet
+**Auth & Users**
 ```
 POST   /api/auth/register          – Register new user                                    [built]
 POST   /api/auth/login             – Login (returns JWT)                                   [built]
 GET    /api/users/me               – Get current user profile (auth required)              [built]
-PUT    /api/users/me/games         – Update followed games                                 [Phase 3]
-PUT    /api/users/me/teams         – Update followed teams                                 [Phase 3]
+PUT    /api/users/me/games         – Update followed games                                 [built]
+PUT    /api/users/me/teams         – Update followed teams                                 [built]
 ```
 
 **Games** — the two sub-resource routes were deliberately skipped as redundant with the filtered list endpoints below
@@ -110,11 +114,12 @@ GET    /api/games                  – List all supported games                 
 GET    /api/games/{slug}           – Get game details                                      [built]
 ```
 
-**Tournaments** — all paginated (`page`/`size`/`sort` query params, `PagedResponse` envelope)
+**Tournaments** — list/detail/matches paginated (`page`/`size`/`sort` query params, `PagedResponse` envelope); standings is not, since a group table is always small
 ```
 GET    /api/tournaments            – List (filter: game, status, tier)                     [built]
-GET    /api/tournaments/{id}       – Tournament details                                    [built, no standings yet]
+GET    /api/tournaments/{id}       – Tournament details                                    [built]
 GET    /api/tournaments/{id}/matches – Matches in a tournament, paginated                   [built]
+GET    /api/tournaments/{id}/standings – Standings for a tournament, by group then rank     [built]
 ```
 
 **Matches** — list/detail/today paginated where applicable
@@ -122,12 +127,12 @@ GET    /api/tournaments/{id}/matches – Matches in a tournament, paginated     
 GET    /api/matches                – List (filter: game, team, status, from/to date range)  [built]
 GET    /api/matches/today          – Today's matches across all games                       [built]
 GET    /api/matches/{id}           – Match details                                          [built]
-GET    /api/matches/upcoming       – Upcoming matches for followed games/teams (auth req.)   [Phase 3]
+GET    /api/matches/upcoming       – Upcoming matches for followed games/teams (auth req.)   [built]
 ```
 
-**Feed (personalized)** — not built
+**Feed (personalized)**
 ```
-GET    /api/feed                   – Combined feed: upcoming matches + running tournaments for followed games/teams (auth required)   [Phase 3]
+GET    /api/feed                   – Combined feed: upcoming matches + running tournaments for followed games/teams (auth required)   [built]
 ```
 
 ### External API Integration
@@ -141,7 +146,7 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 - **Auth:** `x-api-key` header. Not a secret Riot ever tried to protect — the same key value is hardcoded client-side by lolesports.com itself and documented across dozens of open-source projects — but it's still stored as `${RIOT_ESPORTS_API_KEY}`, not hardcoded, so it can be swapped if Riot ever rotates it.
 - **Rate limit:** undocumented/unofficial API, no published limit — poll conservatively regardless.
 - Endpoints actually used: `getLeagues`, `getTournamentsForLeague`, `getSchedule` (params: `leagueId`), `getEventDetails` (resolves the authoritative tournament ID + stable team IDs that `getSchedule` alone doesn't expose)
-- Not yet used: `getStandings` (Phase 4), `getCompletedEvents`
+- Not yet used: `getCompletedEvents`
 
 **Dota 2 Steam Web API (Valve) — NOT implemented.** Config placeholders exist (`steam.api-key`, `steam.base-url`) but no client, no DTOs, no sync. Blocked on the user registering a free Steam API key. When built, follow the same pattern as `client/riot/`.
 - **Base URL:** `https://api.steampowered.com/IDOTA2Match_570/`
@@ -152,7 +157,7 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 **Sync Strategy** (implemented for Riot/LoL in `RiotSyncService` + `RiotSyncScheduler`; Dota 2 not built):
 - `@Scheduled` cron jobs, matching cadence to data volatility
 - `syncLeaguesAndTournaments` (`sync.tournaments-cron`, every 6h): **every** league Riot returns (~40+), not filtered — gives a full catalog for a future "choose leagues to follow" settings UI. Tier derived from `league.region`/slug at sync time (see Tournament entity above).
-- `syncMatches` (`sync.matches-cron`, every 15m): scoped to "in-season" leagues only — those with a `Tournament` currently `UPCOMING` or `RUNNING` within a 14-day horizon — not all leagues every cycle. **Planned change:** drive this by user-follow data instead, once Phase 3 exists.
+- `syncMatches` (`sync.matches-cron`, every 15m): scoped to "in-season" leagues only — those with a `Tournament` currently `UPCOMING` or `RUNNING` within a 14-day horizon — not all leagues every cycle. Deliberately **not** driven by user follows (earlier plan, rejected — see Current Progress above): poll cost stays bounded by active tournaments instead of scaling with users, and per-user views filter this same fresh dataset at read time.
 - Reconciliation is **upsert-by-`externalId`**, never delete-and-recreate: existing rows updated in place via each entity's `update(...)` method, new rows inserted. Idempotent and self-healing (a corrected score on Riot's side is picked up next poll).
 - Never expose Riot/Valve response payloads directly – always map to internal entities via provider-specific DTOs in `client/<provider>/dto/`
 
@@ -168,7 +173,9 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 - **Unit tests:** Service layer with mocked repositories (Mockito, `ArgumentCaptor` to verify the exact entity that would be persisted). Pure/stateless helper logic (e.g. `RiotSyncService`'s tier/status derivation, name prettification) is `static` and package-private, not `private` — lets tests call it directly via `@ParameterizedTest` instead of only exercising it indirectly through full orchestration.
 - **Controller tests:** `@WebMvcTest`, real mapper beans imported via `@Import(...)` (verifies actual JSON shape, not just "a mock was called"), services mocked via `@MockBean`. **Important gotcha:** `JwtAuthenticationFilter` is a `@Component` implementing `Filter`, so `@WebMvcTest` auto-detects and constructs it regardless of `@AutoConfigureMockMvc(addFilters = false)` — that flag only skips *applying* filters, not *building* the bean — which cascades into needing a live `UserRepository`. Exclude it explicitly: `@WebMvcTest(controllers = X.class, excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtAuthenticationFilter.class))`. The one exception is any controller using `@AuthenticationPrincipal` (e.g. `UserController`) — there, keep the filter chain enabled and use `@WithMockUser` instead, since disabling filters would let unauthenticated requests reach the controller and NPE on a null principal rather than being rejected realistically.
 - **Live integration tests:** for external API clients and sync logic, name the test class `*LiveIT` (e.g. `RiotEsportsClientLiveIT`) — Maven Surefire's default include pattern (`**/*Test.java`, `**/*Tests.java`) does NOT match `*IT.java`, so these are automatically skipped by a plain `mvn test` and only run explicitly via `mvn test -Dtest=ClassName`. A third-party API/DB being unavailable should never fail the regular build.
-- **Repository tests:** `@DataJpaTest` with embedded H2 or Testcontainers (PostgreSQL) — **not built yet**, no repository-layer tests exist.
+- **Repository tests:** `@DataJpaTest` against in-memory H2 in PostgreSQL-compat mode (`src/test/resources/application-test.yml`) — Flyway still runs the real V1–V12 migrations so entities are validated against the actual production schema. Kept to the *non-trivial custom queries* only (`MatchRepository.findUpcomingForFollowed`, `TournamentRepository.findRunningForFollowed`, `StandingRepository.findByTournamentIdOrderByGroupNameAscRankAsc`) — derived queries and Riot-facing code are already covered elsewhere. Testcontainers would only pay off if we introduced Postgres-specific SQL (JSONB, custom types).
+- **`@DataJpaTest` gotchas that bit once and are worth knowing:** (1) `@DataJpaTest` doesn't scan `@Configuration` classes, so `@EnableJpaAuditing` from `JpaAuditingConfig` isn't active by default and `@CreatedDate`/`@LastModifiedDate` stay null — every save then fails on `NOT NULL created_at`. Fix: `@Import(JpaAuditingConfig.class)` on the test. (2) `@AutoConfigureTestDatabase(replace = NONE)` is required so Spring Boot doesn't swap our carefully-configured H2 URL for its own random test DB and skip Flyway.
+- **Full-stack integration test:** one, `FeedFlowIntegrationTest` (`@SpringBootTest` + `MockMvc` + H2), exercises the whole register → login → follow → `/api/feed` chain through the real security/JPA/mapper/controller stack. Proves integration wiring works — the sort of bug (missing `@EntityGraph`, security misroute, JSON shape mismatch) that layer-mocked tests can't catch. `RiotEsportsClient` is `@MockBean`'d so a stray cron tick can't hit the real Riot API. **Must be `@Transactional`:** it shares H2's in-memory DB with the `@DataJpaTest` classes, and without a rolling-back transaction its inserts leak into the shared DB and break the next test class that seeds the same tables.
 - Target: every service method has at least one happy-path and one edge-case test
 - Use meaningful test names: `shouldReturnUpcomingMatchesForFollowedTeams()`
 
@@ -194,19 +201,19 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 9. Implement Tournament and Match endpoints — paginated from the start, pulling Phase 4 step 15 forward
 10. Write tests for sync logic and endpoints — 64 tests, see Testing Strategy above
 
-### Phase 3 – Personalization — not started, up next
-11. Implement user follows (games + teams). Also revisit `RiotSyncService.syncMatches()`'s "in-season leagues" scoping to prioritize actually-followed leagues instead/additionally (noted in Current Progress above)
-12. Build personalized feed endpoint
-13. Build "upcoming matches for my teams" endpoint
-14. Write tests for personalization logic
+### Phase 3 – Personalization ✅ done
+11. ✅ Implement user follows (games + teams). The earlier idea of making `RiotSyncService.syncMatches()` follow-driven was rejected in favor of keeping sync in-season-scoped and filtering per-user at read time (noted in Current Progress above)
+12. ✅ Build personalized feed endpoint
+13. ✅ Build "upcoming matches for my teams" endpoint
+14. ✅ Write tests for personalization logic — 79 tests total (up from 64), plus manual end-to-end verification against real synced Riot data
 
 ### Phase 4 – Polish
 15. ✅ done — filtering/pagination already built into the Tournament/Match endpoints (Phase 2 step 9), pulled forward rather than deferred
-16. Add Swagger/OpenAPI documentation — dependency present in `pom.xml`, not yet configured/verified
-17. Add standings sync and endpoint — needs its own design/confirmation pass (Standing entity fields aren't finalized, see Core Entities above)
+16. ✅ Add Swagger/OpenAPI documentation — `OpenApiConfig` sets title/version/description and declares a `bearer-jwt` security scheme; JWT-protected controllers (`UserController`, `FeedController`) get a class-level `@SecurityRequirement`, `MatchController.upcoming()` gets a method-level one; `SecurityConfig` permits `/swagger-ui.html`, `/swagger-ui/**`, `/v3/api-docs`, `/v3/api-docs/**`. UI at `/swagger-ui.html`, JSON at `/v3/api-docs`.
+17. ✅ Add standings sync and endpoint — 83 tests total (up from 79), plus manual + live-IT verification against real Riot data (see Current Progress above)
 18. ✅ done — `GlobalExceptionHandler` + RFC 7807 `ProblemDetail` responses have been in place since Phase 1, refined incrementally (404/409/401 handlers added as each feature needed them)
-19. Write integration tests — the `*LiveIT` tests (see Testing Strategy) partially cover this; broader `@SpringBootTest` integration coverage not yet done
-20. Clean up README with setup instructions, API examples, architecture diagram — basic run instructions exist in README.md, API examples/architecture diagram not yet added
+19. ✅ Write integration tests — repository tests for the three non-trivial custom queries (`MatchRepositoryTest`/`TournamentRepositoryTest`/`StandingRepositoryTest`, `@DataJpaTest` + H2) plus one full-stack `@SpringBootTest` (`FeedFlowIntegrationTest`) covering register → login → follow → feed. See Testing Strategy above. 88 tests total (up from 83).
+20. ✅ Clean up README — full portfolio-oriented rewrite with Mermaid architecture diagram, tech-stack summary, Docker-based getting-started, curl walkthrough of the register → login → follow → feed flow, full endpoint reference table, testing overview, and a "notable design decisions" section linking back to CLAUDE.md
 
 ## Configuration
 

@@ -5,18 +5,21 @@ import dev.mundorf.esportstracker.client.riot.dto.RiotEventDetail;
 import dev.mundorf.esportstracker.client.riot.dto.RiotEventTeam;
 import dev.mundorf.esportstracker.client.riot.dto.RiotLeague;
 import dev.mundorf.esportstracker.client.riot.dto.RiotScheduleEvent;
+import dev.mundorf.esportstracker.client.riot.dto.RiotStandingEntry;
 import dev.mundorf.esportstracker.client.riot.dto.RiotTournament;
 import dev.mundorf.esportstracker.exception.ResourceNotFoundException;
 import dev.mundorf.esportstracker.model.entity.EventStatus;
 import dev.mundorf.esportstracker.model.entity.Game;
 import dev.mundorf.esportstracker.model.entity.League;
 import dev.mundorf.esportstracker.model.entity.Match;
+import dev.mundorf.esportstracker.model.entity.Standing;
 import dev.mundorf.esportstracker.model.entity.Team;
 import dev.mundorf.esportstracker.model.entity.Tournament;
 import dev.mundorf.esportstracker.model.entity.TournamentTier;
 import dev.mundorf.esportstracker.repository.GameRepository;
 import dev.mundorf.esportstracker.repository.LeagueRepository;
 import dev.mundorf.esportstracker.repository.MatchRepository;
+import dev.mundorf.esportstracker.repository.StandingRepository;
 import dev.mundorf.esportstracker.repository.TeamRepository;
 import dev.mundorf.esportstracker.repository.TournamentRepository;
 import org.slf4j.Logger;
@@ -69,19 +72,22 @@ public class RiotSyncService {
     private final TournamentRepository tournamentRepository;
     private final TeamRepository teamRepository;
     private final MatchRepository matchRepository;
+    private final StandingRepository standingRepository;
 
     public RiotSyncService(RiotEsportsClient client,
                            GameRepository gameRepository,
                            LeagueRepository leagueRepository,
                            TournamentRepository tournamentRepository,
                            TeamRepository teamRepository,
-                           MatchRepository matchRepository) {
+                           MatchRepository matchRepository,
+                           StandingRepository standingRepository) {
         this.client = client;
         this.gameRepository = gameRepository;
         this.leagueRepository = leagueRepository;
         this.tournamentRepository = tournamentRepository;
         this.teamRepository = teamRepository;
         this.matchRepository = matchRepository;
+        this.standingRepository = standingRepository;
     }
 
     /** Slow-changing metadata: every league Riot exposes, and all tournaments under each. */
@@ -130,6 +136,43 @@ public class RiotSyncService {
                 log.warn("Skipping match {}: {}", event.match().id(), ex.toString());
             }
         }
+    }
+
+    /** Fast-changing data: standings for tournaments currently in-season, same horizon as matches. */
+    public void syncStandings() {
+        Game game = lolGame();
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        List<Tournament> activeTournaments = tournamentRepository.findActiveTournaments(
+                today, today.plusDays(MATCH_SYNC_HORIZON_DAYS));
+        log.info("Syncing standings for {} in-season tournaments", activeTournaments.size());
+
+        for (Tournament tournament : activeTournaments) {
+            try {
+                syncStandingsForTournament(game, tournament);
+            } catch (Exception ex) {
+                // One tournament's failure shouldn't abort the rest of the poll.
+                log.warn("Standings sync failed for tournament {}: {}", tournament.getSlug(), ex.toString());
+            }
+        }
+    }
+
+    void syncStandingsForTournament(Game game, Tournament tournament) {
+        List<RiotStandingEntry> entries = client.getStandings(tournament.getExternalId());
+        for (RiotStandingEntry entry : entries) {
+            Team team = upsertTeam(game, entry.team());
+            upsertStanding(tournament, team, entry);
+        }
+    }
+
+    private void upsertStanding(Tournament tournament, Team team, RiotStandingEntry entry) {
+        standingRepository.findByTournamentIdAndTeamIdAndGroupName(tournament.getId(), team.getId(), entry.groupName())
+                .ifPresentOrElse(
+                        existing -> {
+                            existing.update(entry.rank(), entry.wins(), entry.losses());
+                            standingRepository.save(existing);
+                        },
+                        () -> standingRepository.save(new Standing(
+                                tournament, team, entry.groupName(), entry.rank(), entry.wins(), entry.losses())));
     }
 
     private void upsertMatchFromEvent(Game game, RiotScheduleEvent event) {

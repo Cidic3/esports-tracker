@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public interface MatchRepository extends JpaRepository<Match, UUID> {
@@ -50,4 +51,20 @@ public interface MatchRepository extends JpaRepository<Match, UUID> {
                        @Param("from") Instant from,
                        @Param("to") Instant to,
                        Pageable pageable);
+
+    /**
+     * Upcoming matches for a user's followed games/teams (OR semantics: qualifies if the match's game
+     * is followed, or either side is a followed team). Callers must never pass an empty set for either
+     * parameter — an empty "IN ()" list is not portable across JPA providers — so the service layer
+     * substitutes a random non-matching UUID when a user follows nothing of that kind.
+     */
+    @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "game"})
+    @Query("""
+            SELECT m FROM Match m
+            WHERE m.status = dev.mundorf.esportstracker.model.entity.EventStatus.UPCOMING
+              AND (m.game.id IN :gameIds OR m.teamA.id IN :teamIds OR m.teamB.id IN :teamIds)
+            """)
+    Page<Match> findUpcomingForFollowed(@Param("gameIds") Set<UUID> gameIds,
+                                        @Param("teamIds") Set<UUID> teamIds,
+                                        Pageable pageable);
 }

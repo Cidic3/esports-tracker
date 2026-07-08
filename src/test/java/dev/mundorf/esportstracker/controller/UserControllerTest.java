@@ -1,5 +1,7 @@
 package dev.mundorf.esportstracker.controller;
 
+import dev.mundorf.esportstracker.mapper.GameMapper;
+import dev.mundorf.esportstracker.mapper.TeamMapper;
 import dev.mundorf.esportstracker.mapper.UserMapper;
 import dev.mundorf.esportstracker.model.entity.User;
 import dev.mundorf.esportstracker.security.JwtAuthenticationFilter;
@@ -14,8 +16,14 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.UUID;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -38,7 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         controllers = UserController.class,
         excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtAuthenticationFilter.class)
 )
-@Import(UserMapper.class)
+@Import({UserMapper.class, GameMapper.class, TeamMapper.class})
 class UserControllerTest {
 
     @Autowired
@@ -63,5 +71,32 @@ class UserControllerTest {
     void shouldRejectUnauthenticatedRequest() throws Exception {
         mockMvc.perform(get("/api/users/me"))
                 .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @WithMockUser(username = "testuser")
+    void shouldUpdateFollowedGames() throws Exception {
+        User user = new User("testuser", "test@example.com", "hashed-password");
+        when(userService.updateFollowedGames(eq("testuser"), any())).thenReturn(user);
+
+        mockMvc.perform(put("/api/users/me/games").with(csrf())
+                        .contentType("application/json")
+                        .content("{\"slugs\":[\"league-of-legends\",\"dota-2\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("testuser"));
+    }
+
+    @Test
+    @WithMockUser(username = "testuser")
+    void shouldUpdateFollowedTeams() throws Exception {
+        User user = new User("testuser", "test@example.com", "hashed-password");
+        UUID teamId = UUID.randomUUID();
+        when(userService.updateFollowedTeams(eq("testuser"), any())).thenReturn(user);
+
+        mockMvc.perform(put("/api/users/me/teams").with(csrf())
+                        .contentType("application/json")
+                        .content("{\"teamIds\":[\"" + teamId + "\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("testuser"));
     }
 }

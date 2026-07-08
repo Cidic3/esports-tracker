@@ -2,9 +2,11 @@ package dev.mundorf.esportstracker.service.sync;
 
 import dev.mundorf.esportstracker.model.entity.Game;
 import dev.mundorf.esportstracker.model.entity.League;
+import dev.mundorf.esportstracker.model.entity.Tournament;
 import dev.mundorf.esportstracker.repository.GameRepository;
 import dev.mundorf.esportstracker.repository.LeagueRepository;
 import dev.mundorf.esportstracker.repository.MatchRepository;
+import dev.mundorf.esportstracker.repository.StandingRepository;
 import dev.mundorf.esportstracker.repository.TournamentRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +34,8 @@ class RiotSyncServiceLiveIT {
     private TournamentRepository tournamentRepository;
     @Autowired
     private MatchRepository matchRepository;
+    @Autowired
+    private StandingRepository standingRepository;
 
     @Test
     void shouldSyncLeaguesTournamentsAndLecMatches() {
@@ -46,5 +50,21 @@ class RiotSyncServiceLiveIT {
         syncService.syncMatchesForLeague(lol, lec);
 
         assertThat(matchRepository.count()).isPositive();
+    }
+
+    @Test
+    void shouldSyncStandingsForAFinishedLecSplit() {
+        syncService.syncLeaguesAndTournaments();
+        Game lol = gameRepository.findBySlug("league-of-legends").orElseThrow();
+        // LEC Split 2 2026 - already FINISHED with a real win/loss record, confirmed manually
+        // against the live getStandings response before this feature was built.
+        Tournament tournament = tournamentRepository.findByGameIdAndExternalId(lol.getId(), "115548668058343983")
+                .orElseThrow();
+
+        syncService.syncStandingsForTournament(lol, tournament);
+
+        var standings = standingRepository.findByTournamentIdOrderByGroupNameAscRankAsc(tournament.getId());
+        assertThat(standings).isNotEmpty();
+        assertThat(standings).anySatisfy(s -> assertThat(s.getWins() + s.getLosses()).isPositive());
     }
 }

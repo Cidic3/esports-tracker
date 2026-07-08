@@ -10,9 +10,12 @@ import dev.mundorf.esportstracker.model.entity.Match;
 import dev.mundorf.esportstracker.model.entity.Team;
 import dev.mundorf.esportstracker.model.entity.Tournament;
 import dev.mundorf.esportstracker.model.entity.TournamentTier;
+import dev.mundorf.esportstracker.model.entity.User;
 import dev.mundorf.esportstracker.security.JwtAuthenticationFilter;
 import dev.mundorf.esportstracker.service.MatchService;
+import dev.mundorf.esportstracker.service.UserService;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -50,6 +53,9 @@ class MatchControllerTest {
 
     @MockBean
     private MatchService matchService;
+
+    @MockBean
+    private UserService userService;
 
     private final Game lolGame = new Game("League of Legends", "league-of-legends", null);
     private final League lec = new League("LEC", "lec", "EMEA", lolGame, "L1");
@@ -117,5 +123,18 @@ class MatchControllerTest {
 
         mockMvc.perform(get("/api/matches/{id}", id))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @WithMockUser(username = "testuser")
+    void shouldReturnUpcomingMatchesForUser() throws Exception {
+        User user = new User("testuser", "test@example.com", "hashed-password");
+        when(userService.findByUsername("testuser")).thenReturn(user);
+        when(matchService.findUpcomingForUser(eq(user), any()))
+                .thenReturn(new PageImpl<>(List.of(sampleMatch("M4")), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/matches/upcoming"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].teamA.name").value("G2 Esports"));
     }
 }

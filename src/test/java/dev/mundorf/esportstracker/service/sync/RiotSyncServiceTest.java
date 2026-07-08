@@ -7,17 +7,20 @@ import dev.mundorf.esportstracker.client.riot.dto.RiotEventTeam;
 import dev.mundorf.esportstracker.client.riot.dto.RiotLeague;
 import dev.mundorf.esportstracker.client.riot.dto.RiotMatch;
 import dev.mundorf.esportstracker.client.riot.dto.RiotScheduleEvent;
+import dev.mundorf.esportstracker.client.riot.dto.RiotStandingEntry;
 import dev.mundorf.esportstracker.client.riot.dto.RiotTournament;
 import dev.mundorf.esportstracker.model.entity.EventStatus;
 import dev.mundorf.esportstracker.model.entity.Game;
 import dev.mundorf.esportstracker.model.entity.League;
 import dev.mundorf.esportstracker.model.entity.Match;
+import dev.mundorf.esportstracker.model.entity.Standing;
 import dev.mundorf.esportstracker.model.entity.Team;
 import dev.mundorf.esportstracker.model.entity.Tournament;
 import dev.mundorf.esportstracker.model.entity.TournamentTier;
 import dev.mundorf.esportstracker.repository.GameRepository;
 import dev.mundorf.esportstracker.repository.LeagueRepository;
 import dev.mundorf.esportstracker.repository.MatchRepository;
+import dev.mundorf.esportstracker.repository.StandingRepository;
 import dev.mundorf.esportstracker.repository.TeamRepository;
 import dev.mundorf.esportstracker.repository.TournamentRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,14 +60,16 @@ class RiotSyncServiceTest {
     private TeamRepository teamRepository;
     @Mock
     private MatchRepository matchRepository;
+    @Mock
+    private StandingRepository standingRepository;
 
     private RiotSyncService syncService;
     private Game lolGame;
 
     @BeforeEach
     void setUp() {
-        syncService = new RiotSyncService(
-                client, gameRepository, leagueRepository, tournamentRepository, teamRepository, matchRepository);
+        syncService = new RiotSyncService(client, gameRepository, leagueRepository, tournamentRepository,
+                teamRepository, matchRepository, standingRepository);
         lolGame = new Game("League of Legends", "league-of-legends", null);
     }
 
@@ -310,5 +315,55 @@ class RiotSyncServiceTest {
         syncService.syncMatchesForLeague(lolGame, new League("LEC", "lec", "EMEA", lolGame, "L1"));
 
         verify(matchRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldInsertNewStandingWhenNotFound() {
+        Tournament tournament = new Tournament("LEC Split 2 2026", "lec_split_2_2026",
+                new League("LEC", "lec", "EMEA", lolGame, "L1"), lolGame,
+                LocalDate.now().minusDays(30), LocalDate.now().plusDays(30),
+                TournamentTier.PRIMARY, EventStatus.RUNNING, null, "T1");
+        RiotEventTeam riotTeam = new RiotEventTeam("TA", "G2 Esports", "G2", null, null);
+        RiotStandingEntry entry = new RiotStandingEntry("Regular Season", 1, riotTeam, 8, 1);
+        when(client.getStandings("T1")).thenReturn(List.of(entry));
+        Team savedTeam = new Team("G2 Esports", "g2-esports", null, lolGame, "TA");
+        when(teamRepository.findByGameIdAndExternalId(lolGame.getId(), "TA")).thenReturn(Optional.of(savedTeam));
+        when(teamRepository.save(any(Team.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(standingRepository.findByTournamentIdAndTeamIdAndGroupName(
+                tournament.getId(), savedTeam.getId(), "Regular Season")).thenReturn(Optional.empty());
+
+        syncService.syncStandingsForTournament(lolGame, tournament);
+
+        ArgumentCaptor<Standing> captor = ArgumentCaptor.forClass(Standing.class);
+        verify(standingRepository).save(captor.capture());
+        Standing saved = captor.getValue();
+        assertThat(saved.getTournament()).isEqualTo(tournament);
+        assertThat(saved.getTeam()).isEqualTo(savedTeam);
+        assertThat(saved.getGroupName()).isEqualTo("Regular Season");
+        assertThat(saved.getRank()).isEqualTo(1);
+        assertThat(saved.getWins()).isEqualTo(8);
+        assertThat(saved.getLosses()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldUpdateExistingStandingInPlaceRatherThanInsertingDuplicate() {
+        Tournament tournament = new Tournament("LEC Split 2 2026", "lec_split_2_2026",
+                new League("LEC", "lec", "EMEA", lolGame, "L1"), lolGame,
+                LocalDate.now().minusDays(30), LocalDate.now().plusDays(30),
+                TournamentTier.PRIMARY, EventStatus.RUNNING, null, "T1");
+        RiotEventTeam riotTeam = new RiotEventTeam("TA", "G2 Esports", "G2", null, null);
+        RiotStandingEntry entry = new RiotStandingEntry("Regular Season", 1, riotTeam, 9, 1);
+        when(client.getStandings("T1")).thenReturn(List.of(entry));
+        Team savedTeam = new Team("G2 Esports", "g2-esports", null, lolGame, "TA");
+        when(teamRepository.findByGameIdAndExternalId(lolGame.getId(), "TA")).thenReturn(Optional.of(savedTeam));
+        when(teamRepository.save(any(Team.class))).thenAnswer(inv -> inv.getArgument(0));
+        Standing existing = new Standing(tournament, savedTeam, "Regular Season", 1, 8, 1);
+        when(standingRepository.findByTournamentIdAndTeamIdAndGroupName(
+                tournament.getId(), savedTeam.getId(), "Regular Season")).thenReturn(Optional.of(existing));
+
+        syncService.syncStandingsForTournament(lolGame, tournament);
+
+        verify(standingRepository).save(existing); // same instance updated, not a new Standing
+        assertThat(existing.getWins()).isEqualTo(9);
     }
 }
