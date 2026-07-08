@@ -19,7 +19,7 @@ A personal esports tracking platform where users select which games and teams th
 
 **Phase 4 (Polish) — partially started.** Standings (step 17) done: `Standing` entity/migration (V12), `RiotEsportsClient.getStandings`, `RiotSyncService.syncStandings`, `GET /api/tournaments/{id}/standings`. 83 tests (up from 79), verified end-to-end against real Riot data (e.g. LEC Split 2 2026's finished regular-season table matches Riot's response exactly). Pagination (step 15) was pulled forward into Phase 2's Tournament/Match endpoints rather than deferred, and RFC 7807 error handling (step 18) has been in place since Phase 1. Swagger/OpenAPI dependency is present in `pom.xml` but not yet verified/customized. Dota 2/Steam is intentionally out of scope for now (LoL-only working version first).
 
-**Still not done from Phase 3's scope:** `RiotSyncService.syncMatches()` is still scoped to "in-season" leagues (a tournament active or starting within 14 days) rather than user-follow-driven, as originally planned once the follow model existed. Revisit this now that follows are built.
+**Decision (2026-07-08):** the earlier plan to make `RiotSyncService.syncMatches()` follow-driven has been **rejected**. Sync stays in-season-scoped; user follows are a *read-time filter* over the fully-synced dataset (which is how `/api/feed` and `/api/matches/upcoming` already work), not a driver of the poll cadence. Reasons: poll cost stays bounded by the number of active tournaments instead of scaling with users, and every user reads from the same fresh cache instead of each follow triggering its own staleness. The "still not done" note this replaces was left over from an earlier design that made less sense as the follow model landed.
 
 **Known gaps worth knowing about:** no `@DataJpaTest` repository tests exist yet (Testing Strategy below mentions them as a target). `GET /api/games/{slug}/teams` and `/api/games/{slug}/tournaments` were deliberately skipped as redundant with the filtered list endpoints (`/api/tournaments?game=`, etc.) — revisit only if a more RESTful nested-resource style is wanted later.
 
@@ -157,7 +157,7 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 **Sync Strategy** (implemented for Riot/LoL in `RiotSyncService` + `RiotSyncScheduler`; Dota 2 not built):
 - `@Scheduled` cron jobs, matching cadence to data volatility
 - `syncLeaguesAndTournaments` (`sync.tournaments-cron`, every 6h): **every** league Riot returns (~40+), not filtered — gives a full catalog for a future "choose leagues to follow" settings UI. Tier derived from `league.region`/slug at sync time (see Tournament entity above).
-- `syncMatches` (`sync.matches-cron`, every 15m): scoped to "in-season" leagues only — those with a `Tournament` currently `UPCOMING` or `RUNNING` within a 14-day horizon — not all leagues every cycle. **Planned change, still not done:** drive this by user-follow data instead, now that Phase 3's follow model exists.
+- `syncMatches` (`sync.matches-cron`, every 15m): scoped to "in-season" leagues only — those with a `Tournament` currently `UPCOMING` or `RUNNING` within a 14-day horizon — not all leagues every cycle. Deliberately **not** driven by user follows (earlier plan, rejected — see Current Progress above): poll cost stays bounded by active tournaments instead of scaling with users, and per-user views filter this same fresh dataset at read time.
 - Reconciliation is **upsert-by-`externalId`**, never delete-and-recreate: existing rows updated in place via each entity's `update(...)` method, new rows inserted. Idempotent and self-healing (a corrected score on Riot's side is picked up next poll).
 - Never expose Riot/Valve response payloads directly – always map to internal entities via provider-specific DTOs in `client/<provider>/dto/`
 
@@ -200,7 +200,7 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 10. Write tests for sync logic and endpoints — 64 tests, see Testing Strategy above
 
 ### Phase 3 – Personalization ✅ done
-11. ✅ Implement user follows (games + teams). `RiotSyncService.syncMatches()`'s "in-season leagues" scoping to prioritize actually-followed leagues instead/additionally is still **not done** (noted in Current Progress above)
+11. ✅ Implement user follows (games + teams). The earlier idea of making `RiotSyncService.syncMatches()` follow-driven was rejected in favor of keeping sync in-season-scoped and filtering per-user at read time (noted in Current Progress above)
 12. ✅ Build personalized feed endpoint
 13. ✅ Build "upcoming matches for my teams" endpoint
 14. ✅ Write tests for personalization logic — 79 tests total (up from 64), plus manual end-to-end verification against real synced Riot data
