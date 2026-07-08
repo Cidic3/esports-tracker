@@ -46,7 +46,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/games/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/tournaments/**").permitAll()
+                        // Order matters: this specific match must be declared before the /api/matches/**
+                        // permitAll below, since Spring Security uses first-match-wins.
+                        .requestMatchers(HttpMethod.GET, "/api/matches/upcoming").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/matches/**").permitAll()
+                        .requestMatchers("/api/feed").authenticated()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         // Permit the error dispatch, else an exception in any handler gets re-dispatched
                         // to /error, blocked by anyRequest().authenticated(), and masked as a 401.

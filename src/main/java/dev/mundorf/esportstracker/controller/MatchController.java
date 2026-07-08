@@ -5,10 +5,13 @@ import dev.mundorf.esportstracker.model.dto.MatchResponse;
 import dev.mundorf.esportstracker.model.dto.PagedResponse;
 import dev.mundorf.esportstracker.model.entity.EventStatus;
 import dev.mundorf.esportstracker.service.MatchService;
+import dev.mundorf.esportstracker.service.UserService;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,10 +31,12 @@ public class MatchController {
 
     private final MatchService matchService;
     private final MatchMapper matchMapper;
+    private final UserService userService;
 
-    public MatchController(MatchService matchService, MatchMapper matchMapper) {
+    public MatchController(MatchService matchService, MatchMapper matchMapper, UserService userService) {
         this.matchService = matchService;
         this.matchMapper = matchMapper;
+        this.userService = userService;
     }
 
     @GetMapping
@@ -48,6 +53,14 @@ public class MatchController {
         return PagedResponse.from(
                 matchService.search(game, status, team, fromInstant, toInstant, pageable),
                 matchMapper::toResponse);
+    }
+
+    @GetMapping("/upcoming")
+    public PagedResponse<MatchResponse> upcoming(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PageableDefault(size = 20, sort = "scheduledAt", direction = Sort.Direction.ASC) Pageable pageable) {
+        var user = userService.findByUsername(userDetails.getUsername());
+        return PagedResponse.from(matchService.findUpcomingForUser(user, pageable), matchMapper::toResponse);
     }
 
     @GetMapping("/today")

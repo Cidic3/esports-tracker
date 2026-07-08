@@ -15,11 +15,11 @@ A personal esports tracking platform where users select which games and teams th
 
 **Phase 2 (Core Data) — done.** League/Team/Tournament/Match entities + migrations, `RiotEsportsClient` (LoL only — Dota 2/Steam client is not built, only config placeholders exist), `RiotSyncService` + scheduler polling live Riot data, Tournament/Match REST endpoints (paginated), 64 tests. Verified end-to-end against real Riot data (42 leagues, 488+ tournaments, growing match history).
 
-**Phase 3 (Personalization) — not started.** User follows (games/teams), `/api/feed`, `/api/matches/upcoming`, `PUT /api/users/me/games`/`teams`.
+**Phase 3 (Personalization) — done.** `User.followedGames`/`followedTeams` (many-to-many, full-replace semantics) + migrations V10/V11, `PUT /api/users/me/games`/`teams` (validates slugs/ids exist before replacing), `GET /api/matches/upcoming` and `GET /api/feed` (both query by followed games/teams with OR semantics, using a placeholder-UUID trick to keep `IN (...)` clauses non-empty), all auth-required. 79 tests (up from 64), plus manual end-to-end verification against real synced Riot data (register → login → follow → upcoming/feed → 401/404/400 edge cases all confirmed).
 
 **Phase 4 (Polish) — not started**, except pagination (step 15), which was pulled forward into Phase 2's Tournament/Match endpoints rather than deferred, and RFC 7807 error handling (step 18), which has been in place since Phase 1. Swagger/OpenAPI dependency is present in `pom.xml` but not yet verified/customized. `Standing` entity/endpoint/sync do not exist yet.
 
-**Also decided, not yet built:** match-sync polling is currently scoped to "in-season" leagues (a tournament active or starting within 14 days) rather than user-follow-driven — the user wants this to eventually be driven by what users actually follow instead, once Phase 3's follow model exists. Revisit `RiotSyncService.syncMatches()` when building follows.
+**Still not done from Phase 3's scope:** `RiotSyncService.syncMatches()` is still scoped to "in-season" leagues (a tournament active or starting within 14 days) rather than user-follow-driven, as originally planned once the follow model existed. Revisit this now that follows are built.
 
 **Known gaps worth knowing about:** no `@DataJpaTest` repository tests exist yet (Testing Strategy below mentions them as a target). `GET /api/games/{slug}/teams` and `/api/games/{slug}/tournaments` were deliberately skipped as redundant with the filtered list endpoints (`/api/tournaments?game=`, etc.) — revisit only if a more RESTful nested-resource style is wanted later.
 
@@ -65,10 +65,10 @@ A Steam/Dota 2 client would live at `client/steam/` following the same pattern o
 
 ### Core Entities
 
-**User** — follows relations are **Phase 3, not built yet**; only the base fields exist today
+**User**
 - id, username, email, passwordHash, createdAt
-- Follows games (many-to-many) — planned
-- Follows teams (many-to-many) — planned
+- Follows games (many-to-many, `user_followed_games`, full-replace semantics via `replaceFollowedGames`)
+- Follows teams (many-to-many, `user_followed_teams`, full-replace semantics via `replaceFollowedTeams`)
 
 **Game**
 - id, name, slug (e.g. "league-of-legends", "dota-2"), iconUrl
@@ -95,13 +95,13 @@ A Steam/Dota 2 client would live at `client/steam/` following the same pattern o
 
 ### REST Endpoints
 
-**Auth & Users** — register/login/me built (Phase 1); the two PUT routes are Phase 3, not built yet
+**Auth & Users**
 ```
 POST   /api/auth/register          – Register new user                                    [built]
 POST   /api/auth/login             – Login (returns JWT)                                   [built]
 GET    /api/users/me               – Get current user profile (auth required)              [built]
-PUT    /api/users/me/games         – Update followed games                                 [Phase 3]
-PUT    /api/users/me/teams         – Update followed teams                                 [Phase 3]
+PUT    /api/users/me/games         – Update followed games                                 [built]
+PUT    /api/users/me/teams         – Update followed teams                                 [built]
 ```
 
 **Games** — the two sub-resource routes were deliberately skipped as redundant with the filtered list endpoints below
@@ -122,12 +122,12 @@ GET    /api/tournaments/{id}/matches – Matches in a tournament, paginated     
 GET    /api/matches                – List (filter: game, team, status, from/to date range)  [built]
 GET    /api/matches/today          – Today's matches across all games                       [built]
 GET    /api/matches/{id}           – Match details                                          [built]
-GET    /api/matches/upcoming       – Upcoming matches for followed games/teams (auth req.)   [Phase 3]
+GET    /api/matches/upcoming       – Upcoming matches for followed games/teams (auth req.)   [built]
 ```
 
-**Feed (personalized)** — not built
+**Feed (personalized)**
 ```
-GET    /api/feed                   – Combined feed: upcoming matches + running tournaments for followed games/teams (auth required)   [Phase 3]
+GET    /api/feed                   – Combined feed: upcoming matches + running tournaments for followed games/teams (auth required)   [built]
 ```
 
 ### External API Integration
@@ -152,7 +152,7 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 **Sync Strategy** (implemented for Riot/LoL in `RiotSyncService` + `RiotSyncScheduler`; Dota 2 not built):
 - `@Scheduled` cron jobs, matching cadence to data volatility
 - `syncLeaguesAndTournaments` (`sync.tournaments-cron`, every 6h): **every** league Riot returns (~40+), not filtered — gives a full catalog for a future "choose leagues to follow" settings UI. Tier derived from `league.region`/slug at sync time (see Tournament entity above).
-- `syncMatches` (`sync.matches-cron`, every 15m): scoped to "in-season" leagues only — those with a `Tournament` currently `UPCOMING` or `RUNNING` within a 14-day horizon — not all leagues every cycle. **Planned change:** drive this by user-follow data instead, once Phase 3 exists.
+- `syncMatches` (`sync.matches-cron`, every 15m): scoped to "in-season" leagues only — those with a `Tournament` currently `UPCOMING` or `RUNNING` within a 14-day horizon — not all leagues every cycle. **Planned change, still not done:** drive this by user-follow data instead, now that Phase 3's follow model exists.
 - Reconciliation is **upsert-by-`externalId`**, never delete-and-recreate: existing rows updated in place via each entity's `update(...)` method, new rows inserted. Idempotent and self-healing (a corrected score on Riot's side is picked up next poll).
 - Never expose Riot/Valve response payloads directly – always map to internal entities via provider-specific DTOs in `client/<provider>/dto/`
 
@@ -194,11 +194,11 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 9. Implement Tournament and Match endpoints — paginated from the start, pulling Phase 4 step 15 forward
 10. Write tests for sync logic and endpoints — 64 tests, see Testing Strategy above
 
-### Phase 3 – Personalization — not started, up next
-11. Implement user follows (games + teams). Also revisit `RiotSyncService.syncMatches()`'s "in-season leagues" scoping to prioritize actually-followed leagues instead/additionally (noted in Current Progress above)
-12. Build personalized feed endpoint
-13. Build "upcoming matches for my teams" endpoint
-14. Write tests for personalization logic
+### Phase 3 – Personalization ✅ done
+11. ✅ Implement user follows (games + teams). `RiotSyncService.syncMatches()`'s "in-season leagues" scoping to prioritize actually-followed leagues instead/additionally is still **not done** (noted in Current Progress above)
+12. ✅ Build personalized feed endpoint
+13. ✅ Build "upcoming matches for my teams" endpoint
+14. ✅ Write tests for personalization logic — 79 tests total (up from 64), plus manual end-to-end verification against real synced Riot data
 
 ### Phase 4 – Polish
 15. ✅ done — filtering/pagination already built into the Tournament/Match endpoints (Phase 2 step 9), pulled forward rather than deferred
