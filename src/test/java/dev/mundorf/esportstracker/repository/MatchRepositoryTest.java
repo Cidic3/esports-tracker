@@ -49,7 +49,7 @@ class MatchRepositoryTest {
     private TournamentRepository tournamentRepository;
 
     @Test
-    void shouldFindUpcomingMatchesMatchingFollowedGameOrEitherFollowedTeam() {
+    void shouldFindUpcomingMatchesMatchingFollowedLeagueOrEitherFollowedTeam() {
         Game lol = gameRepository.findBySlug("league-of-legends").orElseThrow();
         Game dota = gameRepository.findBySlug("dota-2").orElseThrow();
         League lec = leagueRepository.save(new League("LEC", "lec", "EMEA", lol, "L1"));
@@ -68,29 +68,29 @@ class MatchRepositoryTest {
         Team peakInternal = teamRepository.save(new Team("Peak Internal", "peak-internal", null, dota, "TPI"));
 
         Instant tomorrow = Instant.now().plusSeconds(86_400);
-        Match qualifiesByGame = matchRepository.save(new Match(lecTourney, lol, g2, fnc,
+        Match qualifiesByLeague = matchRepository.save(new Match(lecTourney, lol, g2, fnc,
                 tomorrow, EventStatus.UPCOMING, 0, 0, null, "M1"));
         Match qualifiesByTeam = matchRepository.save(new Match(dpcTourney, dota, teamLiquid, og,
                 tomorrow.plusSeconds(3600), EventStatus.UPCOMING, 0, 0, null, "M2"));
         Match excludedByStatus = matchRepository.save(new Match(dpcTourney, dota, teamLiquid, og,
                 tomorrow, EventStatus.FINISHED, 3, 1, null, "M3"));
-        // Dota match with two non-followed teams - the followed-game (LoL) and followed-team
+        // DPC match with two non-followed teams - the followed-league (LEC) and followed-team
         // (teamLiquid) clauses should both miss, so this must NOT appear in the result.
-        Match excludedByGameAndTeam = matchRepository.save(new Match(dpcTourney, dota, og, peakInternal,
+        Match excludedByLeagueAndTeam = matchRepository.save(new Match(dpcTourney, dota, og, peakInternal,
                 tomorrow, EventStatus.UPCOMING, 0, 0, null, "M4"));
-        // User follows: game=LoL (so qualifiesByGame matches) and team=Team Liquid (so
-        // qualifiesByTeam matches). qualifiesByTeam is a Dota match, so it only qualifies via
-        // the followed team, not the followed game - proves OR semantics work.
-        Set<UUID> followedGames = Set.of(lol.getId());
+        // User follows: league=LEC (so qualifiesByLeague matches) and team=Team Liquid (so
+        // qualifiesByTeam matches). qualifiesByTeam is a DPC match, so it only qualifies via
+        // the followed team, not the followed league - proves OR semantics work.
+        Set<UUID> followedLeagues = Set.of(lec.getId());
         Set<UUID> followedTeams = Set.of(teamLiquid.getId());
 
-        Page<Match> result = matchRepository.findUpcomingForFollowed(followedGames, followedTeams,
+        Page<Match> result = matchRepository.findUpcomingForFollowed(followedLeagues, followedTeams,
                 PageRequest.of(0, 20, Sort.by("scheduledAt").ascending()));
 
         assertThat(result.getContent())
                 .extracting(Match::getExternalId)
-                .containsExactly(qualifiesByGame.getExternalId(), qualifiesByTeam.getExternalId())
-                .doesNotContain(excludedByStatus.getExternalId(), excludedByGameAndTeam.getExternalId());
+                .containsExactly(qualifiesByLeague.getExternalId(), qualifiesByTeam.getExternalId())
+                .doesNotContain(excludedByStatus.getExternalId(), excludedByLeagueAndTeam.getExternalId());
     }
 
     @Test

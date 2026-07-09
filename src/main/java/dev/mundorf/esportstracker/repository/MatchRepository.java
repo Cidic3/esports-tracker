@@ -53,18 +53,20 @@ public interface MatchRepository extends JpaRepository<Match, UUID> {
                        Pageable pageable);
 
     /**
-     * Upcoming matches for a user's followed games/teams (OR semantics: qualifies if the match's game
-     * is followed, or either side is a followed team). Callers must never pass an empty set for either
-     * parameter — an empty "IN ()" list is not portable across JPA providers — so the service layer
-     * substitutes a random non-matching UUID when a user follows nothing of that kind.
+     * Upcoming matches for a user's followed leagues/teams (OR semantics: qualifies if the match's
+     * tournament belongs to a followed league, or either side is a followed team). Game-level follows
+     * deliberately don't feed this query — they'd flood the feed with every minor league of the game.
+     * Callers must never pass an empty set for either parameter — an empty "IN ()" list is not
+     * portable across JPA providers — so the service layer substitutes a non-matching placeholder
+     * UUID when a user follows nothing of that kind.
      */
     @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "game"})
     @Query("""
             SELECT m FROM Match m
             WHERE m.status = dev.mundorf.esportstracker.model.entity.EventStatus.UPCOMING
-              AND (m.game.id IN :gameIds OR m.teamA.id IN :teamIds OR m.teamB.id IN :teamIds)
+              AND (m.tournament.league.id IN :leagueIds OR m.teamA.id IN :teamIds OR m.teamB.id IN :teamIds)
             """)
-    Page<Match> findUpcomingForFollowed(@Param("gameIds") Set<UUID> gameIds,
+    Page<Match> findUpcomingForFollowed(@Param("leagueIds") Set<UUID> leagueIds,
                                         @Param("teamIds") Set<UUID> teamIds,
                                         Pageable pageable);
 }

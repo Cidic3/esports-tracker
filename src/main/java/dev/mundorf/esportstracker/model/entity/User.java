@@ -60,6 +60,13 @@ public class User {
             inverseJoinColumns = @JoinColumn(name = "team_id"))
     private Set<Team> followedTeams = new HashSet<>();
 
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "user_followed_leagues",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "league_id"))
+    private Set<League> followedLeagues = new HashSet<>();
+
     protected User() {
         // required by JPA
     }
@@ -102,6 +109,10 @@ public class User {
         return followedTeams;
     }
 
+    public Set<League> getFollowedLeagues() {
+        return followedLeagues;
+    }
+
     /** Full-replace semantics, matching the PUT /api/users/me/games contract. */
     public void replaceFollowedGames(Set<Game> games) {
         followedGames.clear();
@@ -112,5 +123,11 @@ public class User {
     public void replaceFollowedTeams(Set<Team> teams) {
         followedTeams.clear();
         followedTeams.addAll(teams);
+    }
+
+    /** Full-replace semantics, matching the PUT /api/users/me/leagues contract. */
+    public void replaceFollowedLeagues(Set<League> leagues) {
+        followedLeagues.clear();
+        followedLeagues.addAll(leagues);
     }
 }

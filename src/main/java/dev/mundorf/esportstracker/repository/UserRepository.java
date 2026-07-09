@@ -11,7 +11,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByUsername(String username);
 
-    @EntityGraph(attributePaths = {"followedGames", "followedTeams"})
+    // Multiple eager collections are safe here because they're Sets — Hibernate's
+    // MultipleBagFetchException only applies to Lists (bags).
+    @EntityGraph(attributePaths = {"followedGames", "followedTeams", "followedLeagues"})
     Optional<User> findWithFollowsByUsername(String username);
 
     boolean existsByUsername(String username);

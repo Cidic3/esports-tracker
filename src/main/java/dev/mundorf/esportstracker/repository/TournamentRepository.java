@@ -68,19 +68,20 @@ public interface TournamentRepository extends JpaRepository<Tournament, UUID> {
                                            @Param("horizon") LocalDate horizon);
 
     /**
-     * Running tournaments for a user's followed games/teams (a followed team qualifies via any of its
-     * currently scheduled matches in the tournament). Same empty-set caveat as
-     * {@link MatchRepository#findUpcomingForFollowed}: callers must never pass an empty set.
+     * Running tournaments for a user's followed leagues/teams (a followed team qualifies via any of
+     * its currently scheduled matches in the tournament). Game-level follows deliberately don't feed
+     * this query — see {@link MatchRepository#findUpcomingForFollowed}, which also documents the
+     * empty-set caveat: callers must never pass an empty set.
      */
     @EntityGraph(attributePaths = {"league", "game"})
     @Query("""
             SELECT DISTINCT t FROM Tournament t
             WHERE t.status = dev.mundorf.esportstracker.model.entity.EventStatus.RUNNING
-              AND (t.game.id IN :gameIds
+              AND (t.league.id IN :leagueIds
                    OR EXISTS (SELECT 1 FROM Match m
                               WHERE m.tournament = t AND (m.teamA.id IN :teamIds OR m.teamB.id IN :teamIds)))
             """)
-    List<Tournament> findRunningForFollowed(@Param("gameIds") Set<UUID> gameIds,
+    List<Tournament> findRunningForFollowed(@Param("leagueIds") Set<UUID> leagueIds,
                                             @Param("teamIds") Set<UUID> teamIds,
                                             Pageable pageable);
 }

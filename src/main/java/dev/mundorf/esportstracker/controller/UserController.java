@@ -2,6 +2,7 @@ package dev.mundorf.esportstracker.controller;
 
 import dev.mundorf.esportstracker.mapper.UserMapper;
 import dev.mundorf.esportstracker.model.dto.FollowGamesRequest;
+import dev.mundorf.esportstracker.model.dto.FollowLeaguesRequest;
 import dev.mundorf.esportstracker.model.dto.FollowTeamsRequest;
 import dev.mundorf.esportstracker.model.dto.UserResponse;
 import dev.mundorf.esportstracker.service.UserService;
@@ -43,5 +44,11 @@ public class UserController {
     public UserResponse updateFollowedTeams(@AuthenticationPrincipal UserDetails userDetails,
                                             @Valid @RequestBody FollowTeamsRequest request) {
         return userMapper.toResponse(userService.updateFollowedTeams(userDetails.getUsername(), request.teamIds()));
+    }
+
+    @PutMapping("/me/leagues")
+    public UserResponse updateFollowedLeagues(@AuthenticationPrincipal UserDetails userDetails,
+                                              @Valid @RequestBody FollowLeaguesRequest request) {
+        return userMapper.toResponse(userService.updateFollowedLeagues(userDetails.getUsername(), request.leagueIds()));
     }
 }

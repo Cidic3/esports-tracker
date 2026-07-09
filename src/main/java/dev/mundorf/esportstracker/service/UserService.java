@@ -2,9 +2,11 @@ package dev.mundorf.esportstracker.service;
 
 import dev.mundorf.esportstracker.exception.ResourceNotFoundException;
 import dev.mundorf.esportstracker.model.entity.Game;
+import dev.mundorf.esportstracker.model.entity.League;
 import dev.mundorf.esportstracker.model.entity.Team;
 import dev.mundorf.esportstracker.model.entity.User;
 import dev.mundorf.esportstracker.repository.GameRepository;
+import dev.mundorf.esportstracker.repository.LeagueRepository;
 import dev.mundorf.esportstracker.repository.TeamRepository;
 import dev.mundorf.esportstracker.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -21,11 +23,14 @@ public class UserService {
     private final UserRepository userRepository;
     private final GameRepository gameRepository;
     private final TeamRepository teamRepository;
+    private final LeagueRepository leagueRepository;
 
-    public UserService(UserRepository userRepository, GameRepository gameRepository, TeamRepository teamRepository) {
+    public UserService(UserRepository userRepository, GameRepository gameRepository,
+                       TeamRepository teamRepository, LeagueRepository leagueRepository) {
         this.userRepository = userRepository;
         this.gameRepository = gameRepository;
         this.teamRepository = teamRepository;
+        this.leagueRepository = leagueRepository;
     }
 
     public User findByUsername(String username) {
@@ -54,6 +59,18 @@ public class UserService {
             throw new ResourceNotFoundException("One or more team ids not found");
         }
         user.replaceFollowedTeams(new HashSet<>(teams));
+        return user;
+    }
+
+    @Transactional
+    public User updateFollowedLeagues(String username, List<UUID> leagueIds) {
+        User user = findByUsername(username);
+        Set<UUID> requestedIds = new HashSet<>(leagueIds);
+        List<League> leagues = leagueRepository.findAllById(leagueIds);
+        if (leagues.size() != requestedIds.size()) {
+            throw new ResourceNotFoundException("One or more league ids not found");
+        }
+        user.replaceFollowedLeagues(new HashSet<>(leagues));
         return user;
     }
 }

@@ -1,6 +1,7 @@
 package dev.mundorf.esportstracker.service;
 
 import dev.mundorf.esportstracker.model.entity.Game;
+import dev.mundorf.esportstracker.model.entity.League;
 import dev.mundorf.esportstracker.model.entity.Team;
 import dev.mundorf.esportstracker.model.entity.User;
 import dev.mundorf.esportstracker.repository.MatchRepository;
@@ -55,20 +56,35 @@ class MatchServiceTest {
     }
 
     @Test
-    void shouldQueryByFollowedGameIdAndSubstitutePlaceholderForEmptyTeams() {
+    void shouldTreatGameOnlyFollowsAsFollowingNothing() {
+        // Game follows are a UI grouping, not a feed driver — a user who follows a game but
+        // no leagues/teams gets an empty feed instead of every minor league of that game.
         User user = new User("testuser", "test@example.com", "hashed-password");
         user.replaceFollowedGames(Set.of(lolGame));
+        Pageable pageable = PageRequest.of(0, 20);
+
+        Page<?> result = matchService.findUpcomingForUser(user, pageable);
+
+        assertThat(result).isEmpty();
+        verify(matchRepository, never()).findUpcomingForFollowed(any(), any(), any());
+    }
+
+    @Test
+    void shouldQueryByFollowedLeagueIdAndSubstitutePlaceholderForEmptyTeams() {
+        User user = new User("testuser", "test@example.com", "hashed-password");
+        League lec = withId(new League("LEC", "lec", "EMEA", lolGame, "L1"));
+        user.replaceFollowedLeagues(Set.of(lec));
         Pageable pageable = PageRequest.of(0, 20);
         when(matchRepository.findUpcomingForFollowed(any(), any(), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of()));
 
         matchService.findUpcomingForUser(user, pageable);
 
-        ArgumentCaptor<Set<UUID>> gameIdsCaptor = ArgumentCaptor.forClass(Set.class);
+        ArgumentCaptor<Set<UUID>> leagueIdsCaptor = ArgumentCaptor.forClass(Set.class);
         ArgumentCaptor<Set<UUID>> teamIdsCaptor = ArgumentCaptor.forClass(Set.class);
-        verify(matchRepository).findUpcomingForFollowed(gameIdsCaptor.capture(), teamIdsCaptor.capture(), eq(pageable));
+        verify(matchRepository).findUpcomingForFollowed(leagueIdsCaptor.capture(), teamIdsCaptor.capture(), eq(pageable));
 
-        assertThat(gameIdsCaptor.getValue()).containsExactly(lolGame.getId());
+        assertThat(leagueIdsCaptor.getValue()).containsExactly(lec.getId());
         assertThat(teamIdsCaptor.getValue()).hasSize(1); // placeholder, since the user follows no teams
     }
 

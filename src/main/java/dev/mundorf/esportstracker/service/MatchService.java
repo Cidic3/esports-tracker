@@ -2,7 +2,7 @@ package dev.mundorf.esportstracker.service;
 
 import dev.mundorf.esportstracker.exception.ResourceNotFoundException;
 import dev.mundorf.esportstracker.model.entity.EventStatus;
-import dev.mundorf.esportstracker.model.entity.Game;
+import dev.mundorf.esportstracker.model.entity.League;
 import dev.mundorf.esportstracker.model.entity.Match;
 import dev.mundorf.esportstracker.model.entity.Team;
 import dev.mundorf.esportstracker.model.entity.User;
@@ -47,15 +47,18 @@ public class MatchService {
                 .orElseThrow(() -> new ResourceNotFoundException("Match not found: " + id));
     }
 
-    /** Upcoming matches for a user's followed games/teams, most imminent first. */
+    /**
+     * Upcoming matches for a user's followed leagues/teams, most imminent first. Game-level
+     * follows are a UI grouping only and deliberately don't widen this query.
+     */
     public Page<Match> findUpcomingForUser(User user, Pageable pageable) {
-        Set<UUID> gameIds = user.getFollowedGames().stream().map(Game::getId).collect(Collectors.toSet());
+        Set<UUID> leagueIds = user.getFollowedLeagues().stream().map(League::getId).collect(Collectors.toSet());
         Set<UUID> teamIds = user.getFollowedTeams().stream().map(Team::getId).collect(Collectors.toSet());
-        if (gameIds.isEmpty() && teamIds.isEmpty()) {
+        if (leagueIds.isEmpty() && teamIds.isEmpty()) {
             return Page.empty(pageable);
         }
         return matchRepository.findUpcomingForFollowed(
-                gameIds.isEmpty() ? NONE : gameIds,
+                leagueIds.isEmpty() ? NONE : leagueIds,
                 teamIds.isEmpty() ? NONE : teamIds,
                 pageable);
     }

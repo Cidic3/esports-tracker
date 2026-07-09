@@ -10,6 +10,7 @@ public record UserResponse(
         String email,
         Instant createdAt,
         List<GameResponse> followedGames,
+        List<LeagueResponse> followedLeagues,
         List<TeamResponse> followedTeams
 ) {
 }
