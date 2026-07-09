@@ -11,7 +11,9 @@ import dev.mundorf.esportstracker.model.entity.Team;
 import dev.mundorf.esportstracker.model.entity.Tournament;
 import dev.mundorf.esportstracker.model.entity.TournamentTier;
 import dev.mundorf.esportstracker.model.entity.User;
+import dev.mundorf.esportstracker.model.dto.MatchDetailsResponse;
 import dev.mundorf.esportstracker.security.JwtAuthenticationFilter;
+import dev.mundorf.esportstracker.service.MatchDetailsService;
 import dev.mundorf.esportstracker.service.MatchService;
 import dev.mundorf.esportstracker.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -53,6 +55,9 @@ class MatchControllerTest {
 
     @MockBean
     private MatchService matchService;
+
+    @MockBean
+    private MatchDetailsService matchDetailsService;
 
     @MockBean
     private UserService userService;
@@ -123,6 +128,24 @@ class MatchControllerTest {
 
         mockMvc.perform(get("/api/matches/{id}", id))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldReturnMatchDetailsWithPerGameStats() throws Exception {
+        UUID id = UUID.randomUUID();
+        var player = new MatchDetailsResponse.PlayerGameDetails(
+                "EWI Vizicsacsi", "Rumble", "top", 16, 8, 2, 7, 198, 12483L, List.of(3009, 6653));
+        var blue = new MatchDetailsResponse.TeamGameDetails(
+                UUID.randomUUID(), "G2 Esports", 25, 58000, 9, 2, List.of("ocean", "infernal"), List.of(player));
+        var game = new MatchDetailsResponse.GameDetails(1, "completed", blue, null);
+        when(matchDetailsService.getDetails(id)).thenReturn(new MatchDetailsResponse(id, List.of(game)));
+
+        mockMvc.perform(get("/api/matches/{id}/details", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.games[0].number").value(1))
+                .andExpect(jsonPath("$.games[0].blueTeam.players[0].champion").value("Rumble"))
+                .andExpect(jsonPath("$.games[0].blueTeam.players[0].items[0]").value(3009))
+                .andExpect(jsonPath("$.games[0].blueTeam.dragons[1]").value("infernal"));
     }
 
     @Test

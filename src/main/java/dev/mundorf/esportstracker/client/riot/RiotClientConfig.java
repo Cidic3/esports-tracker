@@ -27,4 +27,21 @@ public class RiotClientConfig {
                 .requestFactory(requestFactory)
                 .build();
     }
+
+    /**
+     * Separate client for feed.lolesports.com (per-game live stats). Different host than the
+     * persisted/gw API, and notably needs no API key at all.
+     */
+    @Bean
+    public RestClient riotFeedRestClient(@Value("${riot.feed-base-url}") String feedBaseUrl) {
+        ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.DEFAULTS
+                .withConnectTimeout(Duration.ofSeconds(5))
+                .withReadTimeout(Duration.ofSeconds(10));
+        ClientHttpRequestFactory requestFactory = ClientHttpRequestFactories.get(settings);
+
+        return RestClient.builder()
+                .baseUrl(feedBaseUrl)
+                .requestFactory(requestFactory)
+                .build();
+    }
 }

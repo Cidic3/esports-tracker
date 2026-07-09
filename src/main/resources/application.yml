@@ -18,10 +18,18 @@ spring:
   jackson:
     deserialization:
       fail-on-unknown-properties: false # external API responses (Riot/Valve) can add fields over time; our DTOs only map what we use
+  cache:
+    type: caffeine
+    cache-names: matchDetails
+    caffeine:
+      # Match details are proxied from Riot on demand (not synced); a short TTL keeps
+      # live games fresh while shielding Riot from one request per page view.
+      spec: expireAfterWrite=60s,maximumSize=200
 
 riot:
   esports-api-key: ${RIOT_ESPORTS_API_KEY}
   base-url: https://esports-api.lolesports.com/persisted/gw
+  feed-base-url: https://feed.lolesports.com/livestats/v1 # per-game live stats (champions, items, objectives)
 
 steam:
   api-key: ${STEAM_API_KEY}
