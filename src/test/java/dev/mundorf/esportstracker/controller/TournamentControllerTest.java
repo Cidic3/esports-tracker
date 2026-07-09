@@ -4,6 +4,7 @@ import dev.mundorf.esportstracker.exception.ResourceNotFoundException;
 import dev.mundorf.esportstracker.mapper.MatchMapper;
 import dev.mundorf.esportstracker.mapper.StandingMapper;
 import dev.mundorf.esportstracker.mapper.TeamMapper;
+import dev.mundorf.esportstracker.mapper.LeagueMapper;
 import dev.mundorf.esportstracker.mapper.TournamentMapper;
 import dev.mundorf.esportstracker.model.entity.EventStatus;
 import dev.mundorf.esportstracker.model.entity.Game;
@@ -48,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtAuthenticationFilter.class)
 )
 @AutoConfigureMockMvc(addFilters = false)
-@Import({TournamentMapper.class, MatchMapper.class, TeamMapper.class, StandingMapper.class})
+@Import({TournamentMapper.class, LeagueMapper.class, MatchMapper.class, TeamMapper.class, StandingMapper.class})
 class TournamentControllerTest {
 
     @Autowired

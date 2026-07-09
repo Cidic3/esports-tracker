@@ -1,6 +1,7 @@
 package dev.mundorf.esportstracker.service;
 
 import dev.mundorf.esportstracker.model.entity.Game;
+import dev.mundorf.esportstracker.model.entity.League;
 import dev.mundorf.esportstracker.model.entity.Team;
 import dev.mundorf.esportstracker.model.entity.User;
 import dev.mundorf.esportstracker.repository.TournamentRepository;
@@ -50,18 +51,31 @@ class TournamentServiceTest {
     }
 
     @Test
-    void shouldQueryByFollowedGameIdAndSubstitutePlaceholderForEmptyTeams() {
+    void shouldTreatGameOnlyFollowsAsFollowingNothing() {
+        // Game follows are a UI grouping, not a feed driver (see MatchServiceTest for the why).
         User user = new User("testuser", "test@example.com", "hashed-password");
         user.replaceFollowedGames(Set.of(lolGame));
+
+        List<?> result = tournamentService.findRunningForUser(user, 20);
+
+        assertThat(result).isEmpty();
+        verify(tournamentRepository, never()).findRunningForFollowed(any(), any(), any());
+    }
+
+    @Test
+    void shouldQueryByFollowedLeagueIdAndSubstitutePlaceholderForEmptyTeams() {
+        User user = new User("testuser", "test@example.com", "hashed-password");
+        League lec = withId(new League("LEC", "lec", "EMEA", lolGame, "L1"));
+        user.replaceFollowedLeagues(Set.of(lec));
         when(tournamentRepository.findRunningForFollowed(any(), any(), any())).thenReturn(List.of());
 
         tournamentService.findRunningForUser(user, 20);
 
-        ArgumentCaptor<Set<UUID>> gameIdsCaptor = ArgumentCaptor.forClass(Set.class);
+        ArgumentCaptor<Set<UUID>> leagueIdsCaptor = ArgumentCaptor.forClass(Set.class);
         ArgumentCaptor<Set<UUID>> teamIdsCaptor = ArgumentCaptor.forClass(Set.class);
-        verify(tournamentRepository).findRunningForFollowed(gameIdsCaptor.capture(), teamIdsCaptor.capture(), any(Pageable.class));
+        verify(tournamentRepository).findRunningForFollowed(leagueIdsCaptor.capture(), teamIdsCaptor.capture(), any(Pageable.class));
 
-        assertThat(gameIdsCaptor.getValue()).containsExactly(lolGame.getId());
+        assertThat(leagueIdsCaptor.getValue()).containsExactly(lec.getId());
         assertThat(teamIdsCaptor.getValue()).hasSize(1); // placeholder, since the user follows no teams
     }
 

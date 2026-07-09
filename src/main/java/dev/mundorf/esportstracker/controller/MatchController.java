@@ -1,9 +1,11 @@
 package dev.mundorf.esportstracker.controller;
 
 import dev.mundorf.esportstracker.mapper.MatchMapper;
+import dev.mundorf.esportstracker.model.dto.MatchDetailsResponse;
 import dev.mundorf.esportstracker.model.dto.MatchResponse;
 import dev.mundorf.esportstracker.model.dto.PagedResponse;
 import dev.mundorf.esportstracker.model.entity.EventStatus;
+import dev.mundorf.esportstracker.service.MatchDetailsService;
 import dev.mundorf.esportstracker.service.MatchService;
 import dev.mundorf.esportstracker.service.UserService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -31,11 +33,14 @@ import java.util.UUID;
 public class MatchController {
 
     private final MatchService matchService;
+    private final MatchDetailsService matchDetailsService;
     private final MatchMapper matchMapper;
     private final UserService userService;
 
-    public MatchController(MatchService matchService, MatchMapper matchMapper, UserService userService) {
+    public MatchController(MatchService matchService, MatchDetailsService matchDetailsService,
+                           MatchMapper matchMapper, UserService userService) {
         this.matchService = matchService;
+        this.matchDetailsService = matchDetailsService;
         this.matchMapper = matchMapper;
         this.userService = userService;
     }
@@ -73,5 +78,10 @@ public class MatchController {
     @GetMapping("/{id}")
     public MatchResponse get(@PathVariable UUID id) {
         return matchMapper.toResponse(matchService.findById(id));
+    }
+
+    @GetMapping("/{id}/details")
+    public MatchDetailsResponse details(@PathVariable UUID id) {
+        return matchDetailsService.getDetails(id);
     }
 }

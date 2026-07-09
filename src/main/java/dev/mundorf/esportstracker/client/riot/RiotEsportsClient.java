@@ -1,6 +1,7 @@
 package dev.mundorf.esportstracker.client.riot;
 
 import dev.mundorf.esportstracker.client.riot.dto.RiotEventDetail;
+import dev.mundorf.esportstracker.client.riot.dto.RiotEventGame;
 import dev.mundorf.esportstracker.client.riot.dto.RiotEventTeam;
 import dev.mundorf.esportstracker.client.riot.dto.RiotLeague;
 import dev.mundorf.esportstracker.client.riot.dto.RiotMatchResult;
@@ -95,6 +96,49 @@ public class RiotEsportsClient {
     }
 
     /**
+     * The individual games of a best-of series, with blue/red side assignment per game.
+     * Same getEventDetails call as above, but a separate method so sync (which only needs
+     * tournament/team resolution) and match details (which only needs games) stay decoupled.
+     */
+    public List<RiotEventGame> getEventGames(String matchId) {
+        try {
+            EventDetailsEnvelope response = restClient.get()
+                    .uri(uriBuilder -> uriBuilder.path("/getEventDetails")
+                            .queryParam("hl", "en-US")
+                            .queryParam("id", matchId)
+                            .build())
+                    .retrieve()
+                    .body(EventDetailsEnvelope.class);
+
+            List<EventDetailsEnvelope.EventGame> games = response.data().event().match().games();
+            if (games == null) {
+                return List.of();
+            }
+            return games.stream()
+                    .map(game -> new RiotEventGame(
+                            game.id(),
+                            game.number(),
+                            game.state(),
+                            sideTeamId(game, "blue"),
+                            sideTeamId(game, "red")))
+                    .toList();
+        } catch (RestClientException ex) {
+            throw new ExternalApiException("Failed to fetch event games for match " + matchId, ex);
+        }
+    }
+
+    private static String sideTeamId(EventDetailsEnvelope.EventGame game, String side) {
+        if (game.teams() == null) {
+            return null;
+        }
+        return game.teams().stream()
+                .filter(team -> side.equals(team.side()))
+                .map(EventDetailsEnvelope.GameTeam::id)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
      * Standings, flattened out of Riot's stage/section/ranking nesting into one row per team.
      * Bracket/playoff stages return an empty ranking list (no win-loss table) and are skipped.
      */
@@ -167,10 +211,16 @@ public class RiotEsportsClient {
         private record EventTournament(String id) {
         }
 
-        private record EventMatch(List<EventTeam> teams) {
+        private record EventMatch(List<EventTeam> teams, List<EventGame> games) {
         }
 
         private record EventTeam(String id, String name, String code, String image, RiotMatchResult result) {
+        }
+
+        private record EventGame(String id, int number, String state, List<GameTeam> teams) {
+        }
+
+        private record GameTeam(String id, String side) {
         }
     }
 

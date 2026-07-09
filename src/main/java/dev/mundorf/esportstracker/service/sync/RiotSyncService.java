@@ -51,8 +51,6 @@ public class RiotSyncService {
     private static final Logger log = LoggerFactory.getLogger(RiotSyncService.class);
 
     private static final String LOL_GAME_SLUG = "league-of-legends";
-    private static final Set<String> PRIMARY_LEAGUE_SLUGS = Set.of("lec", "lck", "lpl", "lcs");
-    private static final String REGION_INTERNATIONAL = "INTERNATIONAL";
     private static final int MATCH_SYNC_HORIZON_DAYS = 14;
 
     // For prettifying tournament slugs into display names. Riot's older seasons named splits
@@ -258,14 +256,9 @@ public class RiotSyncService {
 
     // Package-private (not private): lets RiotSyncServiceTest exercise these pure functions
     // directly, without going through the full sync orchestration just to hit one branch.
+    // Tier logic itself lives on TournamentTier so the league API derives the same values.
     static TournamentTier deriveTier(String region, String leagueSlug) {
-        if (REGION_INTERNATIONAL.equalsIgnoreCase(region)) {
-            return TournamentTier.INTERNATIONAL;
-        }
-        if (PRIMARY_LEAGUE_SLUGS.contains(leagueSlug)) {
-            return TournamentTier.PRIMARY;
-        }
-        return TournamentTier.SECONDARY;
+        return TournamentTier.forLeague(region, leagueSlug);
     }
 
     static EventStatus deriveStatus(LocalDate startDate, LocalDate endDate) {

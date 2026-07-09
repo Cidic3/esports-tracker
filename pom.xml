@@ -90,6 +90,16 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- In-memory caching for the on-demand match details proxy (short TTL, see CacheConfig) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Test-only dependencies -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

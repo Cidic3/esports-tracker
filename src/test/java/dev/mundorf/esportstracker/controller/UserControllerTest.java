@@ -1,6 +1,7 @@
 package dev.mundorf.esportstracker.controller;
 
 import dev.mundorf.esportstracker.mapper.GameMapper;
+import dev.mundorf.esportstracker.mapper.LeagueMapper;
 import dev.mundorf.esportstracker.mapper.TeamMapper;
 import dev.mundorf.esportstracker.mapper.UserMapper;
 import dev.mundorf.esportstracker.model.entity.User;
@@ -46,7 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         controllers = UserController.class,
         excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtAuthenticationFilter.class)
 )
-@Import({UserMapper.class, GameMapper.class, TeamMapper.class})
+@Import({UserMapper.class, GameMapper.class, LeagueMapper.class, TeamMapper.class})
 class UserControllerTest {
 
     @Autowired

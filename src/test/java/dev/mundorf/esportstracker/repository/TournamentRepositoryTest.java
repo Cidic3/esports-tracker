@@ -42,7 +42,7 @@ class TournamentRepositoryTest {
     private MatchRepository matchRepository;
 
     @Test
-    void shouldFindRunningTournamentsMatchingFollowedGameOrFollowedTeamViaAnyOfItsMatches() {
+    void shouldFindRunningTournamentsMatchingFollowedLeagueOrFollowedTeamViaAnyOfItsMatches() {
         Game lol = gameRepository.findBySlug("league-of-legends").orElseThrow();
         Game dota = gameRepository.findBySlug("dota-2").orElseThrow();
         League lec = leagueRepository.save(new League("LEC", "lec", "EMEA", lol, "L1"));
@@ -72,9 +72,9 @@ class TournamentRepositoryTest {
         matchRepository.save(new Match(runningDpcWithoutFollows, dota, og, other,
                 Instant.now().plusSeconds(3600), EventStatus.UPCOMING, 0, 0, null, "M2"));
 
-        // User follows: game=LoL and team=Team Liquid.
+        // User follows: league=LEC and team=Team Liquid.
         List<Tournament> result = tournamentRepository.findRunningForFollowed(
-                Set.of(lol.getId()), Set.of(teamLiquid.getId()), PageRequest.of(0, 20));
+                Set.of(lec.getId()), Set.of(teamLiquid.getId()), PageRequest.of(0, 20));
 
         assertThat(result)
                 .extracting(Tournament::getExternalId)

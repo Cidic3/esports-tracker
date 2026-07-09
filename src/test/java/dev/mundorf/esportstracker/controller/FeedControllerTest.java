@@ -2,6 +2,7 @@ package dev.mundorf.esportstracker.controller;
 
 import dev.mundorf.esportstracker.mapper.MatchMapper;
 import dev.mundorf.esportstracker.mapper.TeamMapper;
+import dev.mundorf.esportstracker.mapper.LeagueMapper;
 import dev.mundorf.esportstracker.mapper.TournamentMapper;
 import dev.mundorf.esportstracker.model.entity.EventStatus;
 import dev.mundorf.esportstracker.model.entity.Game;
@@ -46,7 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         controllers = FeedController.class,
         excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtAuthenticationFilter.class)
 )
-@Import({MatchMapper.class, TournamentMapper.class, TeamMapper.class})
+@Import({MatchMapper.class, TournamentMapper.class, LeagueMapper.class, TeamMapper.class})
 class FeedControllerTest {
 
     @Autowired

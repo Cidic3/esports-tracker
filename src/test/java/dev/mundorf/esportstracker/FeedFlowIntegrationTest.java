@@ -75,7 +75,7 @@ class FeedFlowIntegrationTest {
     private RiotEsportsClient riotEsportsClient;
 
     @Test
-    void shouldRegisterLoginFollowGameAndSeeMatchingUpcomingMatchesInFeed() throws Exception {
+    void shouldRegisterLoginFollowLeagueAndSeeMatchingUpcomingMatchesInFeed() throws Exception {
         Game lol = gameRepository.findBySlug("league-of-legends").orElseThrow();
         League lec = leagueRepository.save(new League("LEC", "lec", "EMEA", lol, "L1"));
         Tournament runningLec = tournamentRepository.save(new Tournament("LEC Split 3 2026", "lec_split_3_2026",
@@ -111,6 +111,8 @@ class FeedFlowIntegrationTest {
                 .andExpect(jsonPath("$.upcomingMatches").isEmpty())
                 .andExpect(jsonPath("$.runningTournaments").isEmpty());
 
+        // Following just the game must NOT populate the feed — game follows are a UI grouping;
+        // only league/team follows drive feed content.
         mockMvc.perform(put("/api/users/me/games")
                         .header("Authorization", bearer)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -119,6 +121,24 @@ class FeedFlowIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.followedGames[0].slug").value("league-of-legends"));
+        mockMvc.perform(get("/api/feed").header("Authorization", bearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.upcomingMatches").isEmpty())
+                .andExpect(jsonPath("$.runningTournaments").isEmpty());
+
+        // The public league list is how a client discovers league ids to follow
+        mockMvc.perform(get("/api/leagues").param("game", "league-of-legends"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].slug").value("lec"));
+
+        mockMvc.perform(put("/api/users/me/leagues")
+                        .header("Authorization", bearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"leagueIds":["%s"]}
+                                """.formatted(lec.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.followedLeagues[0].slug").value("lec"));
 
         mockMvc.perform(get("/api/feed").header("Authorization", bearer))
                 .andExpect(status().isOk())
