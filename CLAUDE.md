@@ -27,11 +27,21 @@ A personal esports tracking platform where users select which games and teams th
 
 **Decision (2026-07-09): follow model changed from game-level to league-level.** Following an entire game (all ~40 LoL leagues at once) flooded the feed with minor/national leagues alongside the ones a user actually cares about. `User.followedLeagues` (many-to-many, `user_followed_leagues`, migration V13) was added; `/api/feed` and `/api/matches/upcoming` now match on **followed leagues ∪ followed teams** only. `followedGames` still exists and is still settable via `PUT /api/users/me/games`, but it's a **UI grouping only** — it decides which game's leagues show in settings and no longer widens any feed query. `GET /api/leagues?game=` was added (leagues previously had no standalone endpoint, only nested inside `TournamentResponse`) so the frontend can offer a league picker; `LeagueResponse.tier` is derived at read time via `TournamentTier.forLeague(region, slug)` (shared with the sync-time tournament tier derivation, so the two can never disagree) and drives a collapsible International/Primary/National grouping in the settings UI. Tournament follows were considered and explicitly rejected — a league follow already covers every seasonal split, so a third follow type would mostly just go stale.
 
+**Team browser (2026-07-10) — done.** Closes the "no standalone team endpoint" gap noted below. `GET /api/teams` (paginated, `?game=`/`?search=` filters, case-insensitive name search) and `GET /api/teams/{id}` (team detail: organization, roster, standings, live/upcoming/recent matches). New `Organization` entity (migration V14) that `Team` optionally belongs to — exists so a future second game's teams could link to the same org as their LoL counterpart, though today it's 1:1 since Dota 2 isn't synced. New `Player` entity (migration V14) synced from Riot's `getTeams` endpoint (`RiotEsportsClient.getTeams`, `RiotSyncService.syncTeamsAndRosters`, same 6h cadence as `syncLeaguesAndTournaments`) — full-replace reconciliation per team (a departed player actually disappears, not just goes stale). Roster has no starter/substitute flag from Riot (confirmed by direct API probing), so `PlayerResponse.active` is a **heuristic**: a player counts as active if they appeared in one of the team's last 5 finished matches (cross-referenced against the already-proxied match-details data — see `TeamService.findActiveSummonerNames`/`isActive`), not an authoritative signal. `Team.league` (migration V15, resolved from Riot's `homeLeague` field by name match) lets a team page trigger a **backgrounded, throttled** re-sync of that team's league on visit (`TeamSyncTrigger`, `@Async` + `AsyncConfig`, throttled via the same Caffeine cache mechanism as match details) — the page always renders instantly from whatever's in the DB and never blocks on Riot; a delayed `useTeamDetail` refetch (~4s) picks up anything the background sync found, with a small "Updating matches…" indicator while that refetch is in flight. Frontend: `TeamSearch` (nav dropdown, debounced), `TeamsPage` (full search results, big centered search bar, syncs with URL changes on re-search), `TeamDetailPage` (upcoming → roster grouped active/bench → results with full season names + place emoji → recent matches), `FollowTeamHeaderButton` (Follow/Followed/Unfollow-on-hover).
+
+**Live-match visibility (2026-07-10) — done.** A match transitioning from `UPCOMING` to `RUNNING` used to have nowhere to display: the Feed only queried `UPCOMING` matches and `RUNNING` tournaments (not matches), and team pages only queried `UPCOMING`/`FINISHED`. Added `MatchRepository.findRunningForFollowed`/`MatchService.findLiveForUser`, wired into `FeedResponse.liveMatches` and `TeamDetailResponse.liveMatches`, both rendered as a "Live now" section. `StatusBadge` now takes a `kind: 'match' | 'tournament'` prop: a Match's `RUNNING` status is Riot's own `inProgress` state (a game is genuinely being played, shown as "LIVE"), but a Tournament/League's `RUNNING` status just means today falls within its date range (`RiotSyncService.deriveStatus`) — shown as "ongoing" instead, since it says nothing about whether a game is on stream right now.
+
+**Watch links (2026-07-10) — done.** Match pages show Twitch/YouTube/`watch.lolesports.com` links for `UPCOMING`/`RUNNING` matches (`WatchLinks`, `leagueChannels.ts`). Confirmed by direct probing that Riot's `getEventDetails` only populates a `streams` array once a broadcast is nearly live (empty even 21h out), and `getLeagues` has no channel data at all — so this is a small curated map, not sourced from the API. Twitch only shows for leagues with a genuinely verified handle (`lec`, `lck`, `lcs`; `msi`/`worlds` → `twitch.tv/riotgames`, confirmed correct only for international events, not a general fallback) — an earlier `twitch.tv/lolesports` guess for unlisted leagues was wrong (not a real channel) and was removed; unlisted leagues just don't show a Twitch button. YouTube (`youtube.com/@lolesports`) and the official site are shown unconditionally.
+
+**Other fixes this session:** tournament list now sorts by tier severity (INTERNATIONAL → PRIMARY → SECONDARY) via explicit `CASE` rather than relying on `EventStatus`'s alphabetical-happens-to-match-severity coincidence (`TournamentRepository.search`); tournament detail's match list sorts descending (next match + most recent results first) instead of ascending from the tournament's opening day; `RiotSyncService.prettifyTournamentName` now renders full season names (Winter/Spring/Summer) instead of "Split N" for both textual and numbered slugs (`SPLIT_NUMBER_TO_SEASON`); match cards show a self-adjusting live countdown (`MatchCard.useCountdown` — ticks every second once under an hour out, every minute otherwise, to avoid needless re-renders for far-future matches).
+
 **Known gaps worth knowing about:**
 - `GET /api/games/{slug}/teams` and `/api/games/{slug}/tournaments` were deliberately skipped as redundant with the filtered list endpoints (`/api/tournaments?game=`, etc.) — revisit only if a more RESTful nested-resource style is wanted later.
-- No standalone `GET /api/teams` endpoint yet — teams are currently only discoverable by starring them inline on match cards/standings rows. A searchable team browser (backed by a new paginated `?game=`-filterable endpoint) is a planned follow-up, now lower-priority since league follows also surface most teams a user would want.
+- **No dedicated test coverage for the team browser or live-match features added 2026-07-10** (`TeamController`, `TeamService`, `TeamSyncTrigger`, `PlayerMapper`, `TeamMapper`'s new methods, `MatchService.findLiveForUser`, `RiotSyncService.syncTeamsAndRosters`/`syncTeamAndRoster`/`syncLeagueOnDemand`) — built and manually verified against live Riot data during a fast-moving session, but the project's stated testing bar ("every service method has at least one happy-path and one edge-case test") hasn't been met here yet. Worth closing before treating this code as done the way the rest of the backend is.
 - Follow updates are full-replace PUTs computed from the frontend's cached profile — a race between two toggles (or two tabs) could silently drop one. Not hardened yet; would matter once this has real concurrent users.
 - No React error boundary yet — an unhandled render error currently blanks the whole `<Layout>` instead of degrading gracefully.
+- `Organization` exists but is untested cross-game (Dota 2 still isn't synced), so its "same org across games" purpose is unproven — it's currently just a 1:1 wrapper around `Team`.
+- Watch links are a curated, manually-maintained map (`frontend/src/api/leagueChannels.ts`) covering LEC/LCK/LCS/international only — every other regional league (LPL, CBLOL, PCS, VCS, LJL, etc.) shows no Twitch button, just YouTube + the official site, since no verified handle is on file.
 
 ## Working With Claude
 The user is building this project to learn, not just to have it built. In every session:
@@ -67,7 +77,7 @@ src/main/java/dev/mundorf/esportstracker/
 │   └── riot/           # RiotEsportsClient + RiotLiveStatsClient + RiotClientConfig
 │       └── dto/         # Raw Riot API response shapes (not our internal DTOs)
 ├── security/           # JwtService, JwtAuthenticationFilter, CustomUserDetailsService
-├── config/             # SecurityConfig, JpaAuditingConfig, SchedulingConfig, CacheConfig
+├── config/             # SecurityConfig, JpaAuditingConfig, SchedulingConfig, CacheConfig, AsyncConfig
 ├── exception/          # Custom exceptions + global handler
 └── mapper/             # Entity <-> DTO mapping
 
@@ -88,8 +98,19 @@ A Steam/Dota 2 client would live at `client/steam/` following the same pattern o
 - Source: seeded manually (just LoL + Dota 2 for now)
 
 **Team**
-- id, name, slug (unique per game), logoUrl, game (many-to-one), externalId (unique per game)
+- id, name, slug (unique per game), logoUrl, game (many-to-one), externalId (unique per game), organization (many-to-one, nullable), league (many-to-one, nullable — a team's "home league", used to trigger on-demand sync from its detail page)
+- `organization`/`league` are set only by `RiotSyncService.syncTeamAndRoster` (from Riot's `getTeams`), separately from the narrower `upsertTeam` driven by match/standings sync — a team appearing mid-cycle in a live match never fails on a missing FK while waiting for the roster sync to run
 - Source: synced from Riot (LoL) / Valve (Dota 2)
+
+**Organization** (an esports org, meant to group `Team` rows that represent the same brand across different games)
+- id, name, slug (**globally** unique, unlike Team's per-game slug), logoUrl
+- Currently 1:1 with Team, since only LoL is synced — the grouping exists so linking logic is already in place whenever a second game's sync is built, not so it backfills anything today
+- Source: synced from Riot (LoL) via `getTeams`, upserted by slug
+
+**Player** (a roster entry for a Team)
+- id, team (many-to-one), summonerName, firstName, lastName, imageUrl, role (enum: TOP/JUNGLE/MID/BOTTOM/SUPPORT/NONE — declaration order doubles as display order), externalId (unique per team)
+- No starter/substitute flag — Riot's `getTeams` doesn't expose one (confirmed by direct probing); `PlayerResponse.active` is computed at read time as a heuristic instead (see Current Progress: Team browser)
+- Source: synced from Riot (LoL) via `getTeams`, **full-replace per team** (a departed player is deleted, not left stale) on the same 6h cadence as `syncLeaguesAndTournaments`
 
 **League** (a named recurring competition series — LEC, LCK, and also Worlds/MSI/TI, since Riot's actual API structures international events as leagues too, just with `region="INTERNATIONAL"` instead of a country/region name)
 - id, name, slug (unique per game), region (nullable, e.g. "EMEA", "Korea", "INTERNATIONAL"), game (many-to-one), externalId (unique per game)
@@ -151,9 +172,15 @@ GET    /api/matches/{id}/details   – Per-game stats (champions/items/KDA/objec
 GET    /api/matches/upcoming       – Upcoming matches for followed leagues/teams (auth req.) [built]
 ```
 
+**Teams** — list paginated (`?game=`/`?search=` filters); detail is not
+```
+GET    /api/teams                  – Search/browse teams (filter: game, search by name)     [built]
+GET    /api/teams/{id}             – Team detail: org, roster, standings, live/upcoming/recent matches [built]
+```
+
 **Feed (personalized)**
 ```
-GET    /api/feed                   – Combined feed: upcoming matches + running tournaments for followed leagues/teams (auth required)   [built]
+GET    /api/feed                   – Combined feed: live + upcoming matches, running tournaments, for followed leagues/teams (auth required)   [built]
 ```
 
 ### External API Integration
@@ -178,8 +205,10 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 **Sync Strategy** (implemented for Riot/LoL in `RiotSyncService` + `RiotSyncScheduler`; Dota 2 not built):
 - `@Scheduled` cron jobs, matching cadence to data volatility
 - `syncLeaguesAndTournaments` (`sync.tournaments-cron`, every 6h): **every** league Riot returns (~40+), not filtered — gives a full catalog for the "choose leagues to follow" settings UI (built in Phase 5, `GET /api/leagues`). Tier derived from `league.region`/slug at sync time (see Tournament entity above); `TournamentTier.forLeague(...)` holds the actual logic so tournament sync and the read-time `LeagueResponse.tier` share one implementation.
-- `syncMatches` (`sync.matches-cron`, every 15m): scoped to "in-season" leagues only — those with a `Tournament` currently `UPCOMING` or `RUNNING` within a 14-day horizon — not all leagues every cycle. Deliberately **not** driven by user follows (earlier plan, rejected — see Current Progress above): poll cost stays bounded by active tournaments instead of scaling with users, and per-user views filter this same fresh dataset at read time.
-- Reconciliation is **upsert-by-`externalId`**, never delete-and-recreate: existing rows updated in place via each entity's `update(...)` method, new rows inserted. Idempotent and self-healing (a corrected score on Riot's side is picked up next poll).
+- `syncTeamsAndRosters` (`sync.tournaments-cron`, same 6h cadence — rosters change on transfer-window timescales, not live-match timescales): the full team catalog from Riot's `getTeams` (one call, all games/leagues) — organization, logo, `homeLeague` (resolved to our `League` by name match), and roster (full-replace per team). Independent of the narrower `upsertTeam` below.
+- `syncMatches` (`sync.matches-cron`, every 15m): scoped to "in-season" leagues only — those with a `Tournament` currently `UPCOMING` or `RUNNING` within a 14-day horizon — not all leagues every cycle. Deliberately **not** driven by user follows (earlier plan, rejected — see Current Progress above): poll cost stays bounded by active tournaments instead of scaling with users, and per-user views filter this same fresh dataset at read time. Also upserts `Team` rows it encounters (narrower than `syncTeamsAndRosters` — no organization/league/roster, just enough to satisfy the match's FK).
+- `syncLeagueOnDemand(League)`: same logic as `syncMatches`, but for one league, triggered by a team page visit (`TeamSyncTrigger`, fire-and-forget `@Async`) rather than the cron — throttled via a Caffeine cache (`leagueSyncThrottle`) so repeat visits within 60s are a no-op. Never blocks the request that triggers it.
+- Reconciliation is **upsert-by-`externalId`**, never delete-and-recreate: existing rows updated in place via each entity's `update(...)` method, new rows inserted. Idempotent and self-healing (a corrected score on Riot's side is picked up next poll). `Player` rows are the one exception — roster sync is **full-replace** per team (delete-then-recreate semantics via diffing, not upsert-only), since a departed player should actually disappear.
 - Never expose Riot/Valve response payloads directly – always map to internal entities via provider-specific DTOs in `client/<provider>/dto/`
 
 ### Database Schema Notes
@@ -197,13 +226,14 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 - **Repository tests:** `@DataJpaTest` against in-memory H2 in PostgreSQL-compat mode (`src/test/resources/application-test.yml`) — Flyway still runs the real V1–V12 migrations so entities are validated against the actual production schema. Kept to the *non-trivial custom queries* only (`MatchRepository.findUpcomingForFollowed`, `TournamentRepository.findRunningForFollowed`, `StandingRepository.findByTournamentIdOrderByGroupNameAscRankAsc`) — derived queries and Riot-facing code are already covered elsewhere. Testcontainers would only pay off if we introduced Postgres-specific SQL (JSONB, custom types).
 - **`@DataJpaTest` gotchas that bit once and are worth knowing:** (1) `@DataJpaTest` doesn't scan `@Configuration` classes, so `@EnableJpaAuditing` from `JpaAuditingConfig` isn't active by default and `@CreatedDate`/`@LastModifiedDate` stay null — every save then fails on `NOT NULL created_at`. Fix: `@Import(JpaAuditingConfig.class)` on the test. (2) `@AutoConfigureTestDatabase(replace = NONE)` is required so Spring Boot doesn't swap our carefully-configured H2 URL for its own random test DB and skip Flyway.
 - **Full-stack integration test:** one, `FeedFlowIntegrationTest` (`@SpringBootTest` + `MockMvc` + H2), exercises the whole register → login → follow → `/api/feed` chain through the real security/JPA/mapper/controller stack, including proving that following just a game (no league/team) leaves the feed empty. Proves integration wiring works — the sort of bug (missing `@EntityGraph`, security misroute, JSON shape mismatch) that layer-mocked tests can't catch. `RiotEsportsClient` is `@MockBean`'d so a stray cron tick can't hit the real Riot API. **Must be `@Transactional`:** it shares H2's in-memory DB with the `@DataJpaTest` classes, and without a rolling-back transaction its inserts leak into the shared DB and break the next test class that seeds the same tables.
-- Target: every service method has at least one happy-path and one edge-case test
+- Target: every service method has at least one happy-path and one edge-case test — **not yet met for the team browser/live-match code added 2026-07-10** (see Current Progress: Known gaps)
 - Use meaningful test names: `shouldReturnUpcomingMatchesForFollowedTeams()`
+- 101 tests total as of 2026-07-10 (up from 88)
 - **No frontend test suite yet.** The React app is verified manually/via browser preview per feature (see Phase 5), not with an automated test runner — acceptable for a portfolio project where the backend is the graded surface, but worth naming explicitly as a gap rather than leaving it implicit.
 
 ### Security
 - JWT-based authentication (Spring Security + jjwt)
-- Public endpoints: game listing, league listing, tournament listing, match listing, registration, login
+- Public endpoints: game listing, league listing, tournament listing, match listing, team listing, registration, login
 - Protected endpoints: feed, user profile, follow/unfollow
 - Passwords hashed with BCrypt
 
@@ -213,7 +243,9 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 - **Data fetching:** all server state goes through TanStack Query hooks in `src/api/queries.ts` — no component calls `fetch` directly. Follow mutations (`useFollowGames`/`useFollowLeagues`/`useFollowTeams`) invalidate `['me']`, `['feed']`, and `['matches','upcoming']` on success, matching the backend's full-replace PUT semantics.
 - **Routing:** React Router; logged-in users land on `/` (the feed), logged-out visitors land on `/matches` (public browsing).
 - **Match details UI:** per-game tabs (one per Bo3/Bo5 game) showing champion icons, KDA, CS, gold, item builds, and team objectives, sourced from `GET /api/matches/{id}/details`. Champion/item icons are fetched directly from Riot's Data Dragon CDN in the browser — static assets are never proxied through our API.
-- **Follow model in the UI:** the Following/settings page shows a game checklist (UI grouping — decides which leagues are shown, not what's in the feed) and, per followed game, a collapsible International/Primary/National league picker (order matches `TournamentTier`). Teams are followed inline via a star toggle on match cards and standings rows, not from settings directly.
+- **Follow model in the UI:** the Following/settings page shows a game checklist (UI grouping — decides which leagues are shown, not what's in the feed) and, per followed game, a collapsible International/Primary/National league picker (order matches `TournamentTier`). Teams are followed inline via a star toggle on match cards and standings rows (`FollowTeamButton`), or via a full text button on a team's own page (`FollowTeamHeaderButton` — "Follow"/"Followed", swaps to "Unfollow" on hover while followed).
+- **Team browser:** `TeamSearch` in the nav (debounced dropdown; Enter navigates to a full results page). `TeamsPage` (`/teams?search=`) is the results page — big centered search bar, syncs its local state to the URL on re-search (same-route navigations don't remount, so a plain `useState` initializer alone would miss a second search). `TeamDetailPage` shows, top to bottom: live match banner (if any), upcoming matches, roster (split into "Starting lineup"/"Bench" by the backend's participation heuristic), "Results" (standings, full season tournament names, 🏆/🥈/🥉 by place), recent matches. Loads instantly from cached/DB data and shows a small "Updating matches…" spinner during the ~4s-delayed background refetch (see Current Progress: Team browser).
+- **Live/watch:** `MatchCard` shows a self-adjusting countdown for upcoming matches (top-center); `StatusBadge` distinguishes match "LIVE" from tournament "ongoing" via a `kind` prop. `MatchDetailPage` shows `WatchLinks` (Twitch/YouTube/official site) for non-finished matches, sourced from the curated map in `leagueChannels.ts`.
 - **Dev workflow:** `npm run dev` in `frontend/` (Vite dev server on `:5173`, proxying `/api` to `:8080` — see `vite.config.ts`); `npm run build` runs `tsc -b` (type-check) then `vite build`.
 
 ## Build Order (incremental)
@@ -254,7 +286,13 @@ HTTP client: Spring's `RestClient` (Framework 6.1+), not `RestTemplate` (mainten
 25. ✅ Match details: `GET /api/matches/{id}/details` (Riot live-stats proxy, not synced — see Current Progress) + a per-game stats page with champion/item icons from Data Dragon
 26. Manual/browser-preview verification only per feature — no automated frontend test suite (see Testing Strategy)
 
-**Not yet done, deliberately deferred (see "Known gaps" in Current Progress):** standalone team browser endpoint/UI, React error boundary, hardening follow-update races.
+### Team Browser, Live Matches & Watch Links (2026-07-10, not in the original spec's phase list)
+27. ✅ Team browser: `GET /api/teams` (search/browse) + `GET /api/teams/{id}` (detail), `Organization`/`Player` entities (migration V14), `Team.league` (migration V15), Riot `getTeams` sync, roster active/bench heuristic, throttled on-demand per-league sync from team pages. Frontend: nav search, `TeamsPage`, `TeamDetailPage`, `FollowTeamHeaderButton`.
+28. ✅ Live-match visibility: `liveMatches` on `/api/feed` and team detail, "Live now" sections, match-vs-tournament `StatusBadge` distinction.
+29. ✅ Watch links: `WatchLinks`/`leagueChannels.ts`, curated Twitch handles + universal YouTube/official-site links.
+30. Manual/browser-preview verification only, same as the rest of Phase 5 — **no dedicated backend test coverage yet for any of steps 27–28** (see Known gaps above).
+
+**Not yet done, deliberately deferred (see "Known gaps" in Current Progress):** React error boundary, hardening follow-update races, test coverage for the 2026-07-10 team browser/live-match code, Dota 2/Steam client (still fully unbuilt).
 
 ## Configuration
 
@@ -280,9 +318,9 @@ spring:
       fail-on-unknown-properties: false  # external API responses can add fields over time; our DTOs only map what we use
   cache:
     type: caffeine
-    cache-names: matchDetails
+    cache-names: matchDetails, leagueSyncThrottle
     caffeine:
-      spec: expireAfterWrite=60s,maximumSize=200  # short-lived cache for the on-demand match-details proxy
+      spec: expireAfterWrite=60s,maximumSize=200  # short-lived cache for match-details proxy + on-demand league sync throttle
 
 riot:
   esports-api-key: ${RIOT_ESPORTS_API_KEY}
