@@ -12,6 +12,9 @@ public interface StandingRepository extends JpaRepository<Standing, UUID> {
 
     Optional<Standing> findByTournamentIdAndTeamIdAndGroupName(UUID tournamentId, UUID teamId, String groupName);
 
-    @EntityGraph(attributePaths = {"team"})
+    @EntityGraph(attributePaths = {"team", "tournament"})
     List<Standing> findByTournamentIdOrderByGroupNameAscRankAsc(UUID tournamentId);
+
+    @EntityGraph(attributePaths = {"tournament", "team"})
+    List<Standing> findByTeamId(UUID teamId);
 }

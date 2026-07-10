@@ -24,7 +24,7 @@ export function TournamentCard({ tournament }: { tournament: TournamentResponse 
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <h3 className="font-semibold leading-snug">{tournament.name}</h3>
-        <StatusBadge status={tournament.status} />
+        <StatusBadge status={tournament.status} kind="tournament" />
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
         <span

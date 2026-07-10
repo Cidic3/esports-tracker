@@ -63,6 +63,22 @@ public class MatchService {
                 pageable);
     }
 
+    /**
+     * Matches currently in progress for a user's followed leagues/teams. Same follow semantics as
+     * {@link #findUpcomingForUser} (game-level follows don't widen this).
+     */
+    public Page<Match> findLiveForUser(User user, Pageable pageable) {
+        Set<UUID> leagueIds = user.getFollowedLeagues().stream().map(League::getId).collect(Collectors.toSet());
+        Set<UUID> teamIds = user.getFollowedTeams().stream().map(Team::getId).collect(Collectors.toSet());
+        if (leagueIds.isEmpty() && teamIds.isEmpty()) {
+            return Page.empty(pageable);
+        }
+        return matchRepository.findRunningForFollowed(
+                leagueIds.isEmpty() ? NONE : leagueIds,
+                teamIds.isEmpty() ? NONE : teamIds,
+                pageable);
+    }
+
     /** Matches scheduled anytime during the current UTC calendar day, in chronological order. */
     public List<Match> findToday() {
         LocalDate today = LocalDate.now(ZoneOffset.UTC);

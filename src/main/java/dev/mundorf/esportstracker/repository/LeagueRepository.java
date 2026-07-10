@@ -13,6 +13,9 @@ public interface LeagueRepository extends JpaRepository<League, UUID> {
 
     Optional<League> findByGameIdAndExternalId(UUID gameId, String externalId);
 
+    /** Matches a team's Riot homeLeague (name-only, no id) against our already-synced catalog. */
+    Optional<League> findByGameIdAndNameIgnoreCase(UUID gameId, String name);
+
     /** Settings-page league picker: one game's leagues, grouped by region client-side. */
     List<League> findByGameSlugOrderByRegionAscNameAsc(String gameSlug);
 

@@ -47,6 +47,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/games/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/leagues/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/tournaments/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/teams/**").permitAll()
                         // Order matters: this specific match must be declared before the /api/matches/**
                         // permitAll below, since Spring Security uses first-match-wins.
                         .requestMatchers(HttpMethod.GET, "/api/matches/upcoming").authenticated()

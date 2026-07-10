@@ -25,6 +25,7 @@ public class MatchMapper {
                 teamMapper.toResponse(match.getTeamB()),
                 match.getTournament().getId(),
                 match.getTournament().getName(),
-                match.getGame().getSlug());
+                match.getGame().getSlug(),
+                match.getTournament().getLeague().getSlug());
     }
 }

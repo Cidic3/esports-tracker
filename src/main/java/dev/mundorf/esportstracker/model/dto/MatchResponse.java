@@ -16,6 +16,7 @@ public record MatchResponse(
         TeamResponse teamB,
         UUID tournamentId,
         String tournamentName,
-        String gameSlug
+        String gameSlug,
+        String leagueSlug
 ) {
 }

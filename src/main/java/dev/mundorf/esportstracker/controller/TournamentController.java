@@ -51,7 +51,7 @@ public class TournamentController {
             @RequestParam(required = false) String game,
             @RequestParam(required = false) EventStatus status,
             @RequestParam(required = false) TournamentTier tier,
-            @PageableDefault(size = 20, sort = "startDate", direction = Sort.Direction.DESC) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable) {
         return PagedResponse.from(
                 tournamentService.search(game, status, tier, pageable), tournamentMapper::toResponse);
     }

@@ -30,6 +30,11 @@ public interface TournamentRepository extends JpaRepository<Tournament, UUID> {
      * Filtered, paginated tournament list. Each filter is optional via the
      * "(:param IS NULL OR ...)" idiom. {@code @EntityGraph} eager-loads the associations the DTO
      * needs so mapping after the session closes is safe and doesn't trigger N+1 queries.
+     * <p>
+     * Ordered by tier severity (INTERNATIONAL, then PRIMARY, then SECONDARY) via an explicit CASE
+     * rather than a plain {@code ORDER BY t.tier} — {@code tier} is {@code @Enumerated(STRING)}, so a
+     * raw column sort would be alphabetical, which only coincidentally matches severity order today
+     * and would silently break if a tier name ever changed.
      */
     @EntityGraph(attributePaths = {"league", "game"})
     @Query("""
@@ -37,6 +42,11 @@ public interface TournamentRepository extends JpaRepository<Tournament, UUID> {
             WHERE (:gameSlug IS NULL OR t.game.slug = :gameSlug)
               AND (:status IS NULL OR t.status = :status)
               AND (:tier IS NULL OR t.tier = :tier)
+            ORDER BY CASE t.tier
+                WHEN dev.mundorf.esportstracker.model.entity.TournamentTier.INTERNATIONAL THEN 0
+                WHEN dev.mundorf.esportstracker.model.entity.TournamentTier.PRIMARY THEN 1
+                ELSE 2
+              END, t.startDate DESC
             """)
     Page<Tournament> search(@Param("gameSlug") String gameSlug,
                             @Param("status") EventStatus status,

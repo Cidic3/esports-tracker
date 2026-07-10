@@ -20,10 +20,12 @@ spring:
       fail-on-unknown-properties: false # external API responses (Riot/Valve) can add fields over time; our DTOs only map what we use
   cache:
     type: caffeine
-    cache-names: matchDetails
+    cache-names: matchDetails, leagueSyncThrottle
     caffeine:
       # Match details are proxied from Riot on demand (not synced); a short TTL keeps
-      # live games fresh while shielding Riot from one request per page view.
+      # live games fresh while shielding Riot from one request per page view. Same TTL also
+      # throttles the on-demand per-league match sync triggered by visiting a team page
+      # (RiotSyncService.syncLeagueOnDemand) - repeated visits within 60s are a no-op.
       spec: expireAfterWrite=60s,maximumSize=200
 
 riot:
