@@ -12,7 +12,7 @@ export function FeedPage() {
   if (feed.isPending) return <Loading />
   if (feed.isError) return <ErrorMessage error={feed.error} />
 
-  const { upcomingMatches, runningTournaments } = feed.data
+  const { liveMatches, upcomingMatches, runningTournaments } = feed.data
   // Games alone don't drive the feed — only leagues and teams do.
   const followsNothing =
     user && user.followedLeagues.length === 0 && user.followedTeams.length === 0
@@ -31,10 +31,21 @@ export function FeedPage() {
         </div>
       )}
 
+      {liveMatches.length > 0 && (
+        <section>
+          <h2 className="mb-4 text-lg font-semibold text-zinc-300">Live now</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {liveMatches.map((m) => (
+              <MatchCard key={m.id} match={m} />
+            ))}
+          </div>
+        </section>
+      )}
+
       <section>
-        <h2 className="mb-4 text-lg font-semibold text-zinc-300">Running tournaments</h2>
+        <h2 className="mb-4 text-lg font-semibold text-zinc-300">Ongoing tournaments</h2>
         {runningTournaments.length === 0 ? (
-          <EmptyState message="No tournaments running for what you follow." />
+          <EmptyState message="No tournaments ongoing for what you follow." />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {runningTournaments.map((t) => (

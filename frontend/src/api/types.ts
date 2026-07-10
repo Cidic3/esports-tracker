@@ -18,6 +18,51 @@ export interface TeamResponse {
   logoUrl: string | null
 }
 
+// Team browser search result - unlike TeamResponse (embedded in Match/Standing, where the game is
+// already contextual), a global team search can span games, so the game is included here.
+export interface TeamSummaryResponse {
+  id: string
+  name: string
+  slug: string
+  logoUrl: string | null
+  gameSlug: string
+}
+
+export type PlayerRole = 'TOP' | 'JUNGLE' | 'MID' | 'BOTTOM' | 'SUPPORT' | 'NONE'
+
+// active is a heuristic (recent-match participation), not an authoritative starter/sub flag —
+// see the backend's PlayerResponse javadoc.
+export interface PlayerResponse {
+  id: string
+  summonerName: string
+  firstName: string | null
+  lastName: string | null
+  imageUrl: string | null
+  role: PlayerRole
+  active: boolean
+}
+
+export interface OrganizationResponse {
+  id: string
+  name: string
+  slug: string
+  logoUrl: string | null
+}
+
+export interface TeamDetailResponse {
+  id: string
+  name: string
+  slug: string
+  logoUrl: string | null
+  gameSlug: string
+  organization: OrganizationResponse | null
+  roster: PlayerResponse[]
+  standings: StandingResponse[]
+  liveMatches: MatchResponse[]
+  recentMatches: MatchResponse[]
+  upcomingMatches: MatchResponse[]
+}
+
 export interface LeagueResponse {
   id: string
   name: string
@@ -38,6 +83,7 @@ export interface MatchResponse {
   tournamentId: string
   tournamentName: string
   gameSlug: string
+  leagueSlug: string
 }
 
 export interface TournamentResponse {
@@ -54,6 +100,7 @@ export interface TournamentResponse {
 }
 
 export interface StandingResponse {
+  tournamentName: string
   groupName: string
   rank: number
   wins: number
@@ -72,6 +119,7 @@ export interface UserResponse {
 }
 
 export interface FeedResponse {
+  liveMatches: MatchResponse[]
   upcomingMatches: MatchResponse[]
   runningTournaments: TournamentResponse[]
 }

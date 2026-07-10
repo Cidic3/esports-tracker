@@ -15,6 +15,7 @@ public class StandingMapper {
 
     public StandingResponse toResponse(Standing standing) {
         return new StandingResponse(
+                standing.getTournament().getName(),
                 standing.getGroupName(),
                 standing.getRank(),
                 standing.getWins(),

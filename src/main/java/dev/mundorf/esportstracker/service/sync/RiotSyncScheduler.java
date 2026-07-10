@@ -32,6 +32,17 @@ public class RiotSyncScheduler {
         }
     }
 
+    // Rosters change on transfer-window timescales, not live-match timescales - piggybacks on the
+    // slow tournaments-cron cadence, same reasoning as syncLeaguesAndTournaments above.
+    @Scheduled(cron = "${sync.tournaments-cron}")
+    public void scheduledTeamsAndRostersSync() {
+        try {
+            syncService.syncTeamsAndRosters();
+        } catch (ExternalApiException ex) {
+            log.error("Scheduled teams/rosters sync failed", ex);
+        }
+    }
+
     @Scheduled(cron = "${sync.matches-cron}")
     public void scheduledMatchSync() {
         try {

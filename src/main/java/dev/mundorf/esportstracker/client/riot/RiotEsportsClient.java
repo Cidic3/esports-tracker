@@ -7,6 +7,7 @@ import dev.mundorf.esportstracker.client.riot.dto.RiotLeague;
 import dev.mundorf.esportstracker.client.riot.dto.RiotMatchResult;
 import dev.mundorf.esportstracker.client.riot.dto.RiotScheduleEvent;
 import dev.mundorf.esportstracker.client.riot.dto.RiotStandingEntry;
+import dev.mundorf.esportstracker.client.riot.dto.RiotTeam;
 import dev.mundorf.esportstracker.client.riot.dto.RiotTournament;
 import dev.mundorf.esportstracker.exception.ExternalApiException;
 import org.springframework.stereotype.Component;
@@ -178,6 +179,22 @@ public class RiotEsportsClient {
         }
     }
 
+    /**
+     * The full team catalog (all games, all leagues, one call) - includes roster data unavailable
+     * anywhere else. Unlike the other endpoints, this isn't scoped by league/tournament id.
+     */
+    public List<RiotTeam> getTeams() {
+        try {
+            TeamsEnvelope response = restClient.get()
+                    .uri(uriBuilder -> uriBuilder.path("/getTeams").queryParam("hl", "en-US").build())
+                    .retrieve()
+                    .body(TeamsEnvelope.class);
+            return response.data().teams();
+        } catch (RestClientException ex) {
+            throw new ExternalApiException("Failed to fetch teams from Riot Esports API", ex);
+        }
+    }
+
     // Envelope records mirror Riot's response nesting exactly; kept private since
     // callers only ever need the flat lists returned by the methods above.
     private record LeaguesEnvelope(Data data) {
@@ -221,6 +238,11 @@ public class RiotEsportsClient {
         }
 
         private record GameTeam(String id, String side) {
+        }
+    }
+
+    private record TeamsEnvelope(Data data) {
+        private record Data(List<RiotTeam> teams) {
         }
     }
 

@@ -31,7 +31,7 @@ export function FollowTeamButton({ team }: { team: TeamResponse }) {
       }}
       disabled={followTeams.isPending}
       title={isFollowed ? `Unfollow ${team.name}` : `Follow ${team.name}`}
-      className={`text-sm transition-colors disabled:opacity-50 ${
+      className={`text-xl leading-none transition-colors disabled:opacity-50 ${
         isFollowed ? 'text-amber-400 hover:text-amber-300' : 'text-zinc-600 hover:text-zinc-300'
       }`}
     >

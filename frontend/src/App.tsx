@@ -8,6 +8,8 @@ import { MatchDetailPage } from './pages/MatchDetailPage'
 import { MatchesPage } from './pages/MatchesPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { TeamDetailPage } from './pages/TeamDetailPage'
+import { TeamsPage } from './pages/TeamsPage'
 import { TournamentDetailPage } from './pages/TournamentDetailPage'
 import { TournamentsPage } from './pages/TournamentsPage'
 
@@ -28,6 +30,8 @@ export default function App() {
         <Route path="/matches/:id" element={<MatchDetailPage />} />
         <Route path="/tournaments" element={<TournamentsPage />} />
         <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
+        <Route path="/teams" element={<TeamsPage />} />
+        <Route path="/teams/:id" element={<TeamDetailPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/settings" element={<SettingsPage />} />
         </Route>

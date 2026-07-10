@@ -77,6 +77,8 @@ class FeedControllerTest {
         Match match = new Match(tournament, lolGame, teamA, teamB, Instant.parse("2026-08-01T17:00:00Z"),
                 EventStatus.UPCOMING, null, null, null, "M1");
 
+        when(matchService.findLiveForUser(eq(user), any()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
         when(matchService.findUpcomingForUser(eq(user), any()))
                 .thenReturn(new PageImpl<>(List.of(match), PageRequest.of(0, 20), 1));
         when(tournamentService.findRunningForUser(eq(user), eq(20)))

@@ -19,13 +19,13 @@ public interface MatchRepository extends JpaRepository<Match, UUID> {
 
     Optional<Match> findByGameIdAndExternalId(UUID gameId, String externalId);
 
-    @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "game"})
+    @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "tournament.league", "game"})
     Optional<Match> findWithAssociationsById(UUID id);
 
-    @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "game"})
+    @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "tournament.league", "game"})
     Page<Match> findByTournamentId(UUID tournamentId, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "game"})
+    @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "tournament.league", "game"})
     List<Match> findByScheduledAtBetweenOrderByScheduledAtAsc(Instant from, Instant to);
 
     /**
@@ -36,7 +36,7 @@ public interface MatchRepository extends JpaRepository<Match, UUID> {
     // The cast(...) on the nullable UUID/timestamp params is required for PostgreSQL: a param that
     // only appears in an "IS NULL" check has no inferable type otherwise ("could not determine data
     // type of parameter"). String/enum params don't need it (Postgres defaults them to text).
-    @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "game"})
+    @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "tournament.league", "game"})
     @Query("""
             SELECT m FROM Match m
             WHERE (:gameSlug IS NULL OR m.game.slug = :gameSlug)
@@ -60,7 +60,7 @@ public interface MatchRepository extends JpaRepository<Match, UUID> {
      * portable across JPA providers — so the service layer substitutes a non-matching placeholder
      * UUID when a user follows nothing of that kind.
      */
-    @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "game"})
+    @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "tournament.league", "game"})
     @Query("""
             SELECT m FROM Match m
             WHERE m.status = dev.mundorf.esportstracker.model.entity.EventStatus.UPCOMING
@@ -69,4 +69,19 @@ public interface MatchRepository extends JpaRepository<Match, UUID> {
     Page<Match> findUpcomingForFollowed(@Param("leagueIds") Set<UUID> leagueIds,
                                         @Param("teamIds") Set<UUID> teamIds,
                                         Pageable pageable);
+
+    /**
+     * Same OR-semantics/empty-set caveat as {@link #findUpcomingForFollowed}, but for matches
+     * currently in progress - a followed team's live match otherwise has nowhere to surface: it's
+     * no longer UPCOMING (so it drops out of that query) and isn't FINISHED yet either.
+     */
+    @EntityGraph(attributePaths = {"teamA", "teamB", "tournament", "tournament.league", "game"})
+    @Query("""
+            SELECT m FROM Match m
+            WHERE m.status = dev.mundorf.esportstracker.model.entity.EventStatus.RUNNING
+              AND (m.tournament.league.id IN :leagueIds OR m.teamA.id IN :teamIds OR m.teamB.id IN :teamIds)
+            """)
+    Page<Match> findRunningForFollowed(@Param("leagueIds") Set<UUID> leagueIds,
+                                       @Param("teamIds") Set<UUID> teamIds,
+                                       Pageable pageable);
 }

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, qs } from './client'
 import type {
@@ -10,6 +11,8 @@ import type {
   MatchResponse,
   PagedResponse,
   StandingResponse,
+  TeamDetailResponse,
+  TeamSummaryResponse,
   TournamentResponse,
   TournamentTier,
   UserResponse,
@@ -87,8 +90,12 @@ export function useTournamentMatches(id: string, page: number) {
   return useQuery({
     queryKey: ['tournaments', id, 'matches', page],
     queryFn: () =>
+      // Unlike the pure-"upcoming" match views (soonest-first makes sense there since every
+      // result is in the future), this list mixes finished and upcoming matches across the whole
+      // tournament — descending puts the next match and most recent results at the top instead of
+      // burying them behind the tournament's opening-day matches.
       api.get<PagedResponse<MatchResponse>>(
-        `/api/tournaments/${id}/matches` + qs({ page, sort: 'scheduledAt,asc' }),
+        `/api/tournaments/${id}/matches` + qs({ page, sort: 'scheduledAt,desc' }),
       ),
   })
 }
@@ -98,6 +105,47 @@ export function useStandings(id: string) {
     queryKey: ['tournaments', id, 'standings'],
     queryFn: () => api.get<StandingResponse[]>(`/api/tournaments/${id}/standings`),
   })
+}
+
+export interface TeamFilters {
+  game?: string
+  search?: string
+  page?: number
+  size?: number
+}
+
+export function useTeams(filters: TeamFilters) {
+  return useQuery({
+    queryKey: ['teams', filters],
+    queryFn: () => api.get<PagedResponse<TeamSummaryResponse>>('/api/teams' + qs({ ...filters })),
+    // The search dropdown re-fires this on every keystroke (debounced upstream); an empty
+    // search string means "don't query yet" rather than "browse all teams".
+    enabled: filters.search === undefined || filters.search.length > 0,
+  })
+}
+
+/**
+ * Visiting a team page kicks off a background sync of that team's league on the backend (fire-
+ * and-forget, doesn't block the response - see TeamSyncTrigger). This renders instantly from
+ * whatever's already cached/in the DB, then refetches once a few seconds later to pick up
+ * anything the background sync found; `isFetching` while `!isPending` is that second, quiet
+ * refetch, not the loading spinner.
+ */
+export function useTeamDetail(id: string) {
+  const queryClient = useQueryClient()
+  const query = useQuery({
+    queryKey: ['teams', id],
+    queryFn: () => api.get<TeamDetailResponse>(`/api/teams/${id}`),
+  })
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ['teams', id] })
+    }, 4000)
+    return () => clearTimeout(timeout)
+  }, [id, queryClient])
+
+  return query
 }
 
 export function useMatch(id: string) {

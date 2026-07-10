@@ -76,7 +76,7 @@ export function TournamentDetailPage() {
       <div>
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">{t.name}</h1>
-          <StatusBadge status={t.status} />
+          <StatusBadge status={t.status} kind="tournament" />
         </div>
         <p className="mt-1 text-sm text-zinc-500">
           {t.league?.name}

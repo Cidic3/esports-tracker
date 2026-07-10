@@ -1,5 +1,6 @@
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { TeamSearch } from './TeamSearch'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -34,6 +35,7 @@ export function Layout() {
               </NavLink>
             )}
           </nav>
+          <TeamSearch />
           <div className="flex items-center gap-3">
             {isAuthenticated ? (
               <>

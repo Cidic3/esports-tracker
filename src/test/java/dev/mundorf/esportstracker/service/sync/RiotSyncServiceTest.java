@@ -20,6 +20,8 @@ import dev.mundorf.esportstracker.model.entity.TournamentTier;
 import dev.mundorf.esportstracker.repository.GameRepository;
 import dev.mundorf.esportstracker.repository.LeagueRepository;
 import dev.mundorf.esportstracker.repository.MatchRepository;
+import dev.mundorf.esportstracker.repository.OrganizationRepository;
+import dev.mundorf.esportstracker.repository.PlayerRepository;
 import dev.mundorf.esportstracker.repository.StandingRepository;
 import dev.mundorf.esportstracker.repository.TeamRepository;
 import dev.mundorf.esportstracker.repository.TournamentRepository;
@@ -62,6 +64,10 @@ class RiotSyncServiceTest {
     private MatchRepository matchRepository;
     @Mock
     private StandingRepository standingRepository;
+    @Mock
+    private OrganizationRepository organizationRepository;
+    @Mock
+    private PlayerRepository playerRepository;
 
     private RiotSyncService syncService;
     private Game lolGame;
@@ -69,7 +75,7 @@ class RiotSyncServiceTest {
     @BeforeEach
     void setUp() {
         syncService = new RiotSyncService(client, gameRepository, leagueRepository, tournamentRepository,
-                teamRepository, matchRepository, standingRepository);
+                teamRepository, matchRepository, standingRepository, organizationRepository, playerRepository);
         lolGame = new Game("League of Legends", "league-of-legends", null);
     }
 
@@ -127,10 +133,11 @@ class RiotSyncServiceTest {
 
     @ParameterizedTest
     @CsvSource({
-            "lec_winter_2025,       LEC Split 1 2025",
-            "lec_spring_2025,       LEC Split 2 2025",
-            "lec_summer_2025,       LEC Split 3 2025",
-            "lec_split_3_2026,      LEC Split 3 2026",
+            "lec_winter_2025,       LEC Winter 2025",
+            "lec_spring_2025,       LEC Spring 2025",
+            "lec_summer_2025,       LEC Summer 2025",
+            "lec_split_3_2026,      LEC Summer 2026",
+            "lec_split_5_2026,      LEC Split 5 2026",
             "worlds_2026,           Worlds 2026",
             "lec_season_finals_2024, LEC Season Finals 2024"
     })
@@ -227,7 +234,7 @@ class RiotSyncServiceTest {
         ArgumentCaptor<Tournament> captor = ArgumentCaptor.forClass(Tournament.class);
         verify(tournamentRepository).save(captor.capture());
         Tournament saved = captor.getValue();
-        assertThat(saved.getName()).isEqualTo("LEC Split 3 2026");
+        assertThat(saved.getName()).isEqualTo("LEC Summer 2026");
         assertThat(saved.getLeague()).isEqualTo(league);
         assertThat(saved.getTier()).isEqualTo(TournamentTier.PRIMARY);
         assertThat(saved.getStatus()).isEqualTo(EventStatus.UPCOMING);

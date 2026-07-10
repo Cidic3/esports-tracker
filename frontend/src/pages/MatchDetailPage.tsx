@@ -9,6 +9,7 @@ import {
 } from '../api/queries'
 import type { GameDetails, PlayerGameDetails, TeamGameDetails } from '../api/types'
 import { StatusBadge } from '../components/StatusBadge'
+import { WatchLinks } from '../components/WatchLinks'
 import { EmptyState, ErrorMessage, Loading } from '../components/QueryState'
 
 const ROLE_ORDER = ['top', 'jungle', 'mid', 'bottom', 'support']
@@ -168,6 +169,11 @@ export function MatchDetailPage() {
             minute: '2-digit',
           })}
         </p>
+        {m.status !== 'FINISHED' && (
+          <div className="mt-4">
+            <WatchLinks leagueSlug={m.leagueSlug} />
+          </div>
+        )}
       </div>
 
       {!finishedOrLive ? (

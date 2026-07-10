@@ -42,6 +42,14 @@ public class Team {
     @Column(name = "external_id", nullable = false, length = 100)
     private String externalId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "organization_id")
+    private Organization organization;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "league_id")
+    private League league;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -69,6 +77,24 @@ public class Team {
         this.logoUrl = logoUrl;
     }
 
+    /**
+     * Separate from {@link #update}, since only the roster sync (which calls Riot's getTeams,
+     * the one endpoint with organization data) knows the organization - the narrower upserts
+     * driven by match/standings sync never touch this field.
+     */
+    public void assignOrganization(Organization organization) {
+        this.organization = organization;
+    }
+
+    /**
+     * From Riot's getTeams homeLeague field - lets a team's page trigger an on-demand,
+     * league-scoped match sync (see RiotSyncService.syncLeagueOnDemand) instead of waiting on the
+     * 15-min cron. Same reasoning as assignOrganization: only the roster sync knows this.
+     */
+    public void assignLeague(League league) {
+        this.league = league;
+    }
+
     public UUID getId() {
         return id;
     }
@@ -91,6 +117,14 @@ public class Team {
 
     public String getExternalId() {
         return externalId;
+    }
+
+    public Organization getOrganization() {
+        return organization;
+    }
+
+    public League getLeague() {
+        return league;
     }
 
     public Instant getCreatedAt() {

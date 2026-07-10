@@ -46,6 +46,9 @@ public class FeedController {
         User user = userService.findByUsername(userDetails.getUsername());
         Pageable pageable = PageRequest.of(0, FEED_LIMIT, Sort.by(Sort.Direction.ASC, "scheduledAt"));
 
+        var liveMatches = matchService.findLiveForUser(user, pageable)
+                .map(matchMapper::toResponse)
+                .getContent();
         var upcomingMatches = matchService.findUpcomingForUser(user, pageable)
                 .map(matchMapper::toResponse)
                 .getContent();
@@ -53,6 +56,6 @@ public class FeedController {
                 .map(tournamentMapper::toResponse)
                 .toList();
 
-        return new FeedResponse(upcomingMatches, runningTournaments);
+        return new FeedResponse(liveMatches, upcomingMatches, runningTournaments);
     }
 }

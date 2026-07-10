@@ -20,4 +20,9 @@ public class StandingService {
     public List<Standing> findByTournament(UUID tournamentId) {
         return standingRepository.findByTournamentIdOrderByGroupNameAscRankAsc(tournamentId);
     }
+
+    /** Every tournament a team currently has a ranked position in (usually just its active split). */
+    public List<Standing> findByTeam(UUID teamId) {
+        return standingRepository.findByTeamId(teamId);
+    }
 }
