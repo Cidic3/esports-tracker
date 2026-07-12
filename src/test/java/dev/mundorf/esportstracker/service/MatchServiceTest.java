@@ -103,4 +103,64 @@ class MatchServiceTest {
         verify(matchRepository).findUpcomingForFollowed(any(), teamIdsCaptor.capture(), eq(pageable));
         assertThat(teamIdsCaptor.getValue()).containsExactly(g2.getId());
     }
+
+    // ---- findLiveForUser: same follow semantics as findUpcomingForUser, different repository query ----
+
+    @Test
+    void shouldReturnEmptyPageWithoutQueryingLiveMatchesWhenUserFollowsNothing() {
+        User user = new User("testuser", "test@example.com", "hashed-password");
+        Pageable pageable = PageRequest.of(0, 20);
+
+        Page<?> result = matchService.findLiveForUser(user, pageable);
+
+        assertThat(result).isEmpty();
+        verify(matchRepository, never()).findRunningForFollowed(any(), any(), any());
+    }
+
+    @Test
+    void shouldTreatGameOnlyFollowsAsFollowingNothingForLiveMatches() {
+        User user = new User("testuser", "test@example.com", "hashed-password");
+        user.replaceFollowedGames(Set.of(lolGame));
+        Pageable pageable = PageRequest.of(0, 20);
+
+        Page<?> result = matchService.findLiveForUser(user, pageable);
+
+        assertThat(result).isEmpty();
+        verify(matchRepository, never()).findRunningForFollowed(any(), any(), any());
+    }
+
+    @Test
+    void shouldQueryLiveMatchesByFollowedLeagueIdAndSubstitutePlaceholderForEmptyTeams() {
+        User user = new User("testuser", "test@example.com", "hashed-password");
+        League lec = withId(new League("LEC", "lec", "EMEA", lolGame, "L1"));
+        user.replaceFollowedLeagues(Set.of(lec));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(matchRepository.findRunningForFollowed(any(), any(), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        matchService.findLiveForUser(user, pageable);
+
+        ArgumentCaptor<Set<UUID>> leagueIdsCaptor = ArgumentCaptor.forClass(Set.class);
+        ArgumentCaptor<Set<UUID>> teamIdsCaptor = ArgumentCaptor.forClass(Set.class);
+        verify(matchRepository).findRunningForFollowed(leagueIdsCaptor.capture(), teamIdsCaptor.capture(), eq(pageable));
+
+        assertThat(leagueIdsCaptor.getValue()).containsExactly(lec.getId());
+        assertThat(teamIdsCaptor.getValue()).hasSize(1); // placeholder, since the user follows no teams
+    }
+
+    @Test
+    void shouldQueryLiveMatchesByFollowedTeamId() {
+        User user = new User("testuser", "test@example.com", "hashed-password");
+        Team g2 = withId(new Team("G2 Esports", "g2-esports", null, lolGame, "TA"));
+        user.replaceFollowedTeams(Set.of(g2));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(matchRepository.findRunningForFollowed(any(), any(), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        matchService.findLiveForUser(user, pageable);
+
+        ArgumentCaptor<Set<UUID>> teamIdsCaptor = ArgumentCaptor.forClass(Set.class);
+        verify(matchRepository).findRunningForFollowed(any(), teamIdsCaptor.capture(), eq(pageable));
+        assertThat(teamIdsCaptor.getValue()).containsExactly(g2.getId());
+    }
 }
