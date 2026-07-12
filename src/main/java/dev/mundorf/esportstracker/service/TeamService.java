@@ -66,11 +66,16 @@ public class TeamService {
      * Reads the team immediately from whatever's currently in the DB - never blocks on Riot. Fires
      * a background sync of the team's league (see TeamSyncTrigger) so a *later* visit is fresher,
      * throttled via RiotSyncService.syncLeagueOnDemand's cache so repeat visits are cheap.
+     *
+     * <p>LoL teams only: the trigger hits Riot's schedule endpoint, which knows nothing about
+     * ALGS leagues - an Apex team's league here would just burn a Riot call and log an error.
+     * Apex data refreshes solely on its cron cadence (Cito's 500-calls/month budget rules out
+     * per-page-visit syncs anyway - see CitoSyncService).
      */
     public Team findById(UUID id) {
         Team team = teamRepository.findWithAssociationsById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found: " + id));
-        if (team.getLeague() != null) {
+        if (team.getLeague() != null && "league-of-legends".equals(team.getGame().getSlug())) {
             teamSyncTrigger.triggerLeagueSync(team.getLeague());
         }
         return team;

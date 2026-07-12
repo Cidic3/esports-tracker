@@ -1,5 +1,6 @@
 package dev.mundorf.esportstracker.controller;
 
+import dev.mundorf.esportstracker.mapper.ApexMapper;
 import dev.mundorf.esportstracker.mapper.MatchMapper;
 import dev.mundorf.esportstracker.mapper.TeamMapper;
 import dev.mundorf.esportstracker.mapper.LeagueMapper;
@@ -13,6 +14,7 @@ import dev.mundorf.esportstracker.model.entity.Tournament;
 import dev.mundorf.esportstracker.model.entity.TournamentTier;
 import dev.mundorf.esportstracker.model.entity.User;
 import dev.mundorf.esportstracker.security.JwtAuthenticationFilter;
+import dev.mundorf.esportstracker.service.ApexMatchDayService;
 import dev.mundorf.esportstracker.service.MatchService;
 import dev.mundorf.esportstracker.service.TournamentService;
 import dev.mundorf.esportstracker.service.UserService;
@@ -47,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         controllers = FeedController.class,
         excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtAuthenticationFilter.class)
 )
-@Import({MatchMapper.class, TournamentMapper.class, LeagueMapper.class, TeamMapper.class})
+@Import({MatchMapper.class, TournamentMapper.class, LeagueMapper.class, TeamMapper.class, ApexMapper.class})
 class FeedControllerTest {
 
     @Autowired
@@ -57,6 +59,8 @@ class FeedControllerTest {
     private MatchService matchService;
     @MockBean
     private TournamentService tournamentService;
+    @MockBean
+    private ApexMatchDayService apexMatchDayService;
     @MockBean
     private UserService userService;
 
@@ -83,6 +87,8 @@ class FeedControllerTest {
                 .thenReturn(new PageImpl<>(List.of(match), PageRequest.of(0, 20), 1));
         when(tournamentService.findRunningForUser(eq(user), eq(20)))
                 .thenReturn(List.of(tournament));
+        when(apexMatchDayService.findUpcomingForUser(eq(user), any()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/feed"))
                 .andExpect(status().isOk())

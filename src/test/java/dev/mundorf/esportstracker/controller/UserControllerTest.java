@@ -15,6 +15,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
@@ -56,10 +57,16 @@ class UserControllerTest {
     @MockBean
     private UserService userService;
 
+    /** Entities constructed directly (not persisted) never get Hibernate's @Version default. */
+    private static User withVersion(User user, long version) {
+        ReflectionTestUtils.setField(user, "version", version);
+        return user;
+    }
+
     @Test
     @WithMockUser(username = "testuser")
     void shouldReturnCurrentUserProfile() throws Exception {
-        User user = new User("testuser", "test@example.com", "hashed-password");
+        User user = withVersion(new User("testuser", "test@example.com", "hashed-password"), 0L);
         when(userService.findByUsername("testuser")).thenReturn(user);
 
         mockMvc.perform(get("/api/users/me"))
@@ -77,12 +84,12 @@ class UserControllerTest {
     @Test
     @WithMockUser(username = "testuser")
     void shouldUpdateFollowedGames() throws Exception {
-        User user = new User("testuser", "test@example.com", "hashed-password");
-        when(userService.updateFollowedGames(eq("testuser"), any())).thenReturn(user);
+        User user = withVersion(new User("testuser", "test@example.com", "hashed-password"), 1L);
+        when(userService.updateFollowedGames(eq("testuser"), any(), eq(0L))).thenReturn(user);
 
         mockMvc.perform(put("/api/users/me/games").with(csrf())
                         .contentType("application/json")
-                        .content("{\"slugs\":[\"league-of-legends\",\"dota-2\"]}"))
+                        .content("{\"slugs\":[\"league-of-legends\",\"dota-2\"],\"version\":0}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value("testuser"));
     }
@@ -90,14 +97,27 @@ class UserControllerTest {
     @Test
     @WithMockUser(username = "testuser")
     void shouldUpdateFollowedTeams() throws Exception {
-        User user = new User("testuser", "test@example.com", "hashed-password");
+        User user = withVersion(new User("testuser", "test@example.com", "hashed-password"), 1L);
         UUID teamId = UUID.randomUUID();
-        when(userService.updateFollowedTeams(eq("testuser"), any())).thenReturn(user);
+        when(userService.updateFollowedTeams(eq("testuser"), any(), eq(0L))).thenReturn(user);
 
         mockMvc.perform(put("/api/users/me/teams").with(csrf())
                         .contentType("application/json")
-                        .content("{\"teamIds\":[\"" + teamId + "\"]}"))
+                        .content("{\"teamIds\":[\"" + teamId + "\"],\"version\":0}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value("testuser"));
+    }
+
+    @Test
+    @WithMockUser(username = "testuser")
+    void shouldReturn409WhenSubmittedVersionIsStale() throws Exception {
+        when(userService.updateFollowedGames(eq("testuser"), any(), eq(0L)))
+                .thenThrow(new dev.mundorf.esportstracker.exception.StaleUpdateException(
+                        "Your follows changed elsewhere - refresh and try again"));
+
+        mockMvc.perform(put("/api/users/me/games").with(csrf())
+                        .contentType("application/json")
+                        .content("{\"slugs\":[\"league-of-legends\"],\"version\":0}"))
+                .andExpect(status().isConflict());
     }
 }

@@ -52,6 +52,7 @@ public class SecurityConfig {
                         // permitAll below, since Spring Security uses first-match-wins.
                         .requestMatchers(HttpMethod.GET, "/api/matches/upcoming").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/matches/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/apex/**").permitAll()
                         .requestMatchers("/api/feed").authenticated()
                         // Springdoc paths: /swagger-ui/** covers the UI assets but NOT the top-level
                         // /swagger-ui.html entry point; likewise /v3/api-docs/** covers grouped docs

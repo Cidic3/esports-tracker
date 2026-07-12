@@ -1,9 +1,15 @@
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useTeamDetail } from '../api/queries'
 import type { PlayerResponse } from '../api/types'
 import { FollowTeamHeaderButton } from '../components/FollowTeamHeaderButton'
 import { MatchCard } from '../components/MatchCard'
 import { EmptyState, ErrorMessage, Loading } from '../components/QueryState'
+
+const GAME_LABELS: Record<string, string> = {
+  'league-of-legends': 'League of Legends',
+  'dota-2': 'Dota 2',
+  'apex-legends': 'Apex Legends',
+}
 
 const PLACE_EMOJI: Record<number, string> = {
   1: '🏆',
@@ -123,9 +129,7 @@ export function TeamDetailPage() {
         )}
         <div>
           <h1 className="text-2xl font-bold">{t.name}</h1>
-          <p className="text-sm text-zinc-500">
-            {t.gameSlug === 'league-of-legends' ? 'League of Legends' : t.gameSlug}
-          </p>
+          <p className="text-sm text-zinc-500">{GAME_LABELS[t.gameSlug] ?? t.gameSlug}</p>
         </div>
         <FollowTeamHeaderButton team={t} />
         {team.isFetching && (
@@ -136,6 +140,40 @@ export function TeamDetailPage() {
         )}
       </div>
 
+      {/* Apex teams have no roster/head-to-head-match/standings data (Cito exposes team names and
+          results only) — showing those sections as permanently empty would read as broken, so
+          Apex teams get just their recent ALGS match day placements instead. */}
+      {t.gameSlug === 'apex-legends' ? (
+        <section>
+          <h2 className="mb-4 text-lg font-semibold text-zinc-300">Recent ALGS results</h2>
+          {t.apexResults.length === 0 ? (
+            <EmptyState message="No ALGS results synced for this team yet." />
+          ) : (
+            <div className="space-y-2">
+              {t.apexResults.map((r) => (
+                <Link
+                  key={`${r.matchDayId}`}
+                  to={`/apex/${r.matchDayId}`}
+                  className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm transition-colors hover:border-zinc-600"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-zinc-100">{r.matchDayName}</span>
+                    <span className="block truncate text-xs text-zinc-500">{r.tournamentName}</span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="font-semibold text-zinc-100">
+                      {PLACE_EMOJI[r.rank] && <span className="mr-1">{PLACE_EMOJI[r.rank]}</span>}
+                      {ordinal(r.rank)} Place
+                    </span>
+                    <span className="ml-3 tabular-nums text-zinc-400">{r.totalPoints} pts</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
+        <>
       {t.liveMatches.length > 0 && (
         <section>
           <h2 className="mb-4 text-lg font-semibold text-zinc-300">Live now</h2>
@@ -204,6 +242,8 @@ export function TeamDetailPage() {
           </div>
         )}
       </section>
+        </>
+      )}
     </div>
   )
 }

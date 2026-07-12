@@ -1,5 +1,6 @@
 package dev.mundorf.esportstracker.mapper;
 
+import dev.mundorf.esportstracker.model.dto.ApexTeamRecentResultResponse;
 import dev.mundorf.esportstracker.model.dto.MatchResponse;
 import dev.mundorf.esportstracker.model.dto.OrganizationResponse;
 import dev.mundorf.esportstracker.model.dto.PlayerResponse;
@@ -34,7 +35,8 @@ public class TeamMapper {
                                                List<StandingResponse> standings,
                                                List<MatchResponse> liveMatches,
                                                List<MatchResponse> recentMatches,
-                                               List<MatchResponse> upcomingMatches) {
+                                               List<MatchResponse> upcomingMatches,
+                                               List<ApexTeamRecentResultResponse> apexResults) {
         return new TeamDetailResponse(
                 team.getId(),
                 team.getName(),
@@ -46,7 +48,8 @@ public class TeamMapper {
                 standings,
                 liveMatches,
                 recentMatches,
-                upcomingMatches);
+                upcomingMatches,
+                apexResults);
     }
 
     private OrganizationResponse toOrganizationResponse(Organization organization) {

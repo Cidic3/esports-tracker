@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, qs } from './client'
+import { api, ApiError, qs } from './client'
 import type {
+  ApexMatchDayDetailResponse,
+  ApexMatchDayResponse,
   AuthResponse,
   EventStatus,
   FeedResponse,
@@ -53,6 +55,11 @@ export function useMatches(filters: MatchFilters) {
     queryKey: ['matches', filters],
     queryFn: () =>
       api.get<PagedResponse<MatchResponse>>('/api/matches' + qs({ sort, ...filters })),
+    // Without this, a match card's countdown can hit "Starting now" and just sit there — the
+    // backend only flips UPCOMING -> RUNNING on its own 15-min sync tick, and TanStack Query
+    // otherwise only refetches on refocus/remount, so an open tab would show a stale status
+    // indefinitely. Only polls while the tab has focus (default refetchIntervalInBackground: false).
+    refetchInterval: 60_000,
   })
 }
 
@@ -148,6 +155,31 @@ export function useTeamDetail(id: string) {
   return query
 }
 
+export interface ApexMatchDayFilters {
+  league?: string
+  status?: EventStatus
+  page?: number
+  size?: number
+}
+
+export function useApexMatchDays(filters: ApexMatchDayFilters) {
+  // Upcoming reads soonest-first; mixed/finished views read newest-first (same as useMatches).
+  const sort = filters.status === 'UPCOMING' ? 'startsAt,asc' : 'startsAt,desc'
+  return useQuery({
+    queryKey: ['apex', 'matchdays', filters],
+    queryFn: () =>
+      api.get<PagedResponse<ApexMatchDayResponse>>('/api/apex/matchdays' + qs({ sort, ...filters })),
+    refetchInterval: 60_000, // see useMatches — same "don't sit on a stale status" reasoning
+  })
+}
+
+export function useApexMatchDay(id: string) {
+  return useQuery({
+    queryKey: ['apex', 'matchdays', id],
+    queryFn: () => api.get<ApexMatchDayDetailResponse>(`/api/apex/matchdays/${id}`),
+  })
+}
+
 export function useMatch(id: string) {
   return useQuery({
     queryKey: ['matches', id],
@@ -203,6 +235,7 @@ export function useFeed() {
   return useQuery({
     queryKey: ['feed'],
     queryFn: () => api.get<FeedResponse>('/api/feed'),
+    refetchInterval: 60_000, // see useMatches — same "don't sit on a stale status" reasoning
   })
 }
 
@@ -210,6 +243,7 @@ export function useUpcoming(page: number) {
   return useQuery({
     queryKey: ['matches', 'upcoming', page],
     queryFn: () => api.get<PagedResponse<MatchResponse>>('/api/matches/upcoming' + qs({ page })),
+    refetchInterval: 60_000,
   })
 }
 
@@ -241,27 +275,60 @@ function useInvalidateFollows() {
   }
 }
 
-export function useFollowGames() {
+/**
+ * The backend rejects a follow-update PUT with 409 if the submitted `version` doesn't match the
+ * user's current one - i.e. this write was computed from a profile that's since changed elsewhere
+ * (another tab, or a second toggle fired before an earlier one's response updated the cache). On a
+ * 409 there's no good way to auto-merge the two intents, so we just refetch the real current state
+ * (rather than leaving the UI showing what it optimistically assumed) and let the error surface so
+ * the user knows to retry with fresh data.
+ */
+function useFollowMutationOptions() {
   const invalidate = useInvalidateFollows()
-  return useMutation({
-    mutationFn: (slugs: string[]) => api.put<UserResponse>('/api/users/me/games', { slugs }),
+  const queryClient = useQueryClient()
+  return {
     onSuccess: invalidate,
+    onError: (error: unknown) => {
+      if (error instanceof ApiError && error.status === 409) {
+        queryClient.invalidateQueries({ queryKey: ['me'] })
+      }
+    },
+  }
+}
+
+function currentUserVersion(queryClient: ReturnType<typeof useQueryClient>): number {
+  return queryClient.getQueryData<UserResponse>(['me'])?.version ?? 0
+}
+
+export function useFollowGames() {
+  const options = useFollowMutationOptions()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (slugs: string[]) =>
+      api.put<UserResponse>('/api/users/me/games', { slugs, version: currentUserVersion(queryClient) }),
+    ...options,
   })
 }
 
 export function useFollowTeams() {
-  const invalidate = useInvalidateFollows()
+  const options = useFollowMutationOptions()
+  const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (teamIds: string[]) => api.put<UserResponse>('/api/users/me/teams', { teamIds }),
-    onSuccess: invalidate,
+    mutationFn: (teamIds: string[]) =>
+      api.put<UserResponse>('/api/users/me/teams', { teamIds, version: currentUserVersion(queryClient) }),
+    ...options,
   })
 }
 
 export function useFollowLeagues() {
-  const invalidate = useInvalidateFollows()
+  const options = useFollowMutationOptions()
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (leagueIds: string[]) =>
-      api.put<UserResponse>('/api/users/me/leagues', { leagueIds }),
-    onSuccess: invalidate,
+      api.put<UserResponse>('/api/users/me/leagues', {
+        leagueIds,
+        version: currentUserVersion(queryClient),
+      }),
+    ...options,
   })
 }
