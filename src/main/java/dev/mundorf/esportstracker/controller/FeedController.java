@@ -1,9 +1,11 @@
 package dev.mundorf.esportstracker.controller;
 
+import dev.mundorf.esportstracker.mapper.ApexMapper;
 import dev.mundorf.esportstracker.mapper.MatchMapper;
 import dev.mundorf.esportstracker.mapper.TournamentMapper;
 import dev.mundorf.esportstracker.model.dto.FeedResponse;
 import dev.mundorf.esportstracker.model.entity.User;
+import dev.mundorf.esportstracker.service.ApexMatchDayService;
 import dev.mundorf.esportstracker.service.MatchService;
 import dev.mundorf.esportstracker.service.TournamentService;
 import dev.mundorf.esportstracker.service.UserService;
@@ -28,17 +30,22 @@ public class FeedController {
 
     private final MatchService matchService;
     private final TournamentService tournamentService;
+    private final ApexMatchDayService apexMatchDayService;
     private final UserService userService;
     private final MatchMapper matchMapper;
     private final TournamentMapper tournamentMapper;
+    private final ApexMapper apexMapper;
 
-    public FeedController(MatchService matchService, TournamentService tournamentService, UserService userService,
-                          MatchMapper matchMapper, TournamentMapper tournamentMapper) {
+    public FeedController(MatchService matchService, TournamentService tournamentService,
+                          ApexMatchDayService apexMatchDayService, UserService userService,
+                          MatchMapper matchMapper, TournamentMapper tournamentMapper, ApexMapper apexMapper) {
         this.matchService = matchService;
         this.tournamentService = tournamentService;
+        this.apexMatchDayService = apexMatchDayService;
         this.userService = userService;
         this.matchMapper = matchMapper;
         this.tournamentMapper = tournamentMapper;
+        this.apexMapper = apexMapper;
     }
 
     @GetMapping
@@ -55,7 +62,12 @@ public class FeedController {
         var runningTournaments = tournamentService.findRunningForUser(user, FEED_LIMIT).stream()
                 .map(tournamentMapper::toResponse)
                 .toList();
+        // Apex days sort on startsAt, not scheduledAt - a BR match day isn't a Match row.
+        Pageable apexPageable = PageRequest.of(0, FEED_LIMIT, Sort.by(Sort.Direction.ASC, "startsAt"));
+        var apexMatchDays = apexMatchDayService.findUpcomingForUser(user, apexPageable)
+                .map(apexMapper::toResponse)
+                .getContent();
 
-        return new FeedResponse(liveMatches, upcomingMatches, runningTournaments);
+        return new FeedResponse(liveMatches, upcomingMatches, runningTournaments, apexMatchDays);
     }
 }

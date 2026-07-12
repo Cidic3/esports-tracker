@@ -39,6 +39,7 @@ public class UserMapper {
                 user.getFollowedTeams().stream()
                         .sorted(Comparator.comparing(Team::getName))
                         .map(teamMapper::toResponse)
-                        .toList());
+                        .toList(),
+                user.getVersion());
     }
 }

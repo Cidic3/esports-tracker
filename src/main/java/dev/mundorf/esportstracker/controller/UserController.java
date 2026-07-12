@@ -37,18 +37,21 @@ public class UserController {
     @PutMapping("/me/games")
     public UserResponse updateFollowedGames(@AuthenticationPrincipal UserDetails userDetails,
                                             @Valid @RequestBody FollowGamesRequest request) {
-        return userMapper.toResponse(userService.updateFollowedGames(userDetails.getUsername(), request.slugs()));
+        return userMapper.toResponse(userService.updateFollowedGames(
+                userDetails.getUsername(), request.slugs(), request.version()));
     }
 
     @PutMapping("/me/teams")
     public UserResponse updateFollowedTeams(@AuthenticationPrincipal UserDetails userDetails,
                                             @Valid @RequestBody FollowTeamsRequest request) {
-        return userMapper.toResponse(userService.updateFollowedTeams(userDetails.getUsername(), request.teamIds()));
+        return userMapper.toResponse(userService.updateFollowedTeams(
+                userDetails.getUsername(), request.teamIds(), request.version()));
     }
 
     @PutMapping("/me/leagues")
     public UserResponse updateFollowedLeagues(@AuthenticationPrincipal UserDetails userDetails,
                                               @Valid @RequestBody FollowLeaguesRequest request) {
-        return userMapper.toResponse(userService.updateFollowedLeagues(userDetails.getUsername(), request.leagueIds()));
+        return userMapper.toResponse(userService.updateFollowedLeagues(
+                userDetails.getUsername(), request.leagueIds(), request.version()));
     }
 }

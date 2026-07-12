@@ -1,6 +1,7 @@
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { TeamSearch } from './TeamSearch'
+import { ErrorBoundary } from './ErrorBoundary'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -9,6 +10,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export function Layout() {
   const { isAuthenticated, user, logout } = useAuth()
+  const location = useLocation()
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -28,6 +30,9 @@ export function Layout() {
             </NavLink>
             <NavLink to="/tournaments" className={navLinkClass}>
               Tournaments
+            </NavLink>
+            <NavLink to="/apex" className={navLinkClass}>
+              ALGS
             </NavLink>
             {isAuthenticated && (
               <NavLink to="/settings" className={navLinkClass}>
@@ -67,7 +72,10 @@ export function Layout() {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <Outlet />
+        {/* Keyed by path so navigating to a different page always clears a previous error. */}
+        <ErrorBoundary key={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   )

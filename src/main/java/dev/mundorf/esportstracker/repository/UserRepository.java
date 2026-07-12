@@ -13,7 +13,11 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     // Multiple eager collections are safe here because they're Sets — Hibernate's
     // MultipleBagFetchException only applies to Lists (bags).
-    @EntityGraph(attributePaths = {"followedGames", "followedTeams", "followedLeagues"})
+    // followedTeams.game/league are included because the feed resolves followed Apex teams to
+    // their home league AFTER this query's session has closed (open-in-view is off) — without
+    // them, ApexMatchDayService.findUpcomingForUser dies on a LazyInitializationException.
+    @EntityGraph(attributePaths = {
+            "followedGames", "followedTeams", "followedTeams.game", "followedTeams.league", "followedLeagues"})
     Optional<User> findWithFollowsByUsername(String username);
 
     boolean existsByUsername(String username);

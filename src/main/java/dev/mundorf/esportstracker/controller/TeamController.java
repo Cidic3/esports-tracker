@@ -1,5 +1,6 @@
 package dev.mundorf.esportstracker.controller;
 
+import dev.mundorf.esportstracker.mapper.ApexMapper;
 import dev.mundorf.esportstracker.mapper.MatchMapper;
 import dev.mundorf.esportstracker.mapper.PlayerMapper;
 import dev.mundorf.esportstracker.mapper.StandingMapper;
@@ -10,6 +11,7 @@ import dev.mundorf.esportstracker.model.dto.TeamSummaryResponse;
 import dev.mundorf.esportstracker.model.entity.Match;
 import dev.mundorf.esportstracker.model.entity.Player;
 import dev.mundorf.esportstracker.model.entity.Team;
+import dev.mundorf.esportstracker.service.ApexMatchDayService;
 import dev.mundorf.esportstracker.service.StandingService;
 import dev.mundorf.esportstracker.service.TeamService;
 import org.springframework.data.domain.Pageable;
@@ -30,19 +32,25 @@ public class TeamController {
 
     private final TeamService teamService;
     private final StandingService standingService;
+    private final ApexMatchDayService apexMatchDayService;
     private final TeamMapper teamMapper;
     private final PlayerMapper playerMapper;
     private final StandingMapper standingMapper;
     private final MatchMapper matchMapper;
+    private final ApexMapper apexMapper;
 
-    public TeamController(TeamService teamService, StandingService standingService, TeamMapper teamMapper,
-                          PlayerMapper playerMapper, StandingMapper standingMapper, MatchMapper matchMapper) {
+    public TeamController(TeamService teamService, StandingService standingService,
+                          ApexMatchDayService apexMatchDayService, TeamMapper teamMapper,
+                          PlayerMapper playerMapper, StandingMapper standingMapper, MatchMapper matchMapper,
+                          ApexMapper apexMapper) {
         this.teamService = teamService;
         this.standingService = standingService;
+        this.apexMatchDayService = apexMatchDayService;
         this.teamMapper = teamMapper;
         this.playerMapper = playerMapper;
         this.standingMapper = standingMapper;
         this.matchMapper = matchMapper;
+        this.apexMapper = apexMapper;
     }
 
     @GetMapping
@@ -70,6 +78,8 @@ public class TeamController {
                 standingService.findByTeam(id).stream().map(standingMapper::toResponse).toList(),
                 teamService.findLiveMatches(id).stream().map(matchMapper::toResponse).toList(),
                 recentMatches.stream().map(matchMapper::toResponse).toList(),
-                teamService.findUpcomingMatches(id).stream().map(matchMapper::toResponse).toList());
+                teamService.findUpcomingMatches(id).stream().map(matchMapper::toResponse).toList(),
+                apexMatchDayService.findRecentResultsForTeam(id).stream()
+                        .map(apexMapper::toRecentResultResponse).toList());
     }
 }

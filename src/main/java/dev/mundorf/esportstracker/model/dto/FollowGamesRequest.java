@@ -4,5 +4,6 @@ import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
 
-public record FollowGamesRequest(@NotNull List<String> slugs) {
+/** version: the User.version the client last read - see StaleUpdateException. */
+public record FollowGamesRequest(@NotNull List<String> slugs, @NotNull Long version) {
 }
