@@ -117,7 +117,7 @@ class FeedFlowIntegrationTest {
                         .header("Authorization", bearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"slugs":["league-of-legends"]}
+                                {"slugs":["league-of-legends"],"version":0}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.followedGames[0].slug").value("league-of-legends"));
@@ -131,12 +131,24 @@ class FeedFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].slug").value("lec"));
 
+        // Each follow-update PUT bumps the version (optimistic locking - see User.version), so the
+        // next PUT must submit the current version. Read it via a fresh GET rather than trusting
+        // followGamesResult's own body: this test runs the whole flow inside one outer
+        // @Transactional (for rollback-after-test), so the PUT's own response can be serialized
+        // before Hibernate has actually flushed that PUT's version-incrementing UPDATE - a GET
+        // forces a query, which forces the pending flush first, so it always reflects committed state.
+        MvcResult meResult = mockMvc.perform(get("/api/users/me").header("Authorization", bearer))
+                .andExpect(status().isOk())
+                .andReturn();
+        long versionAfterGames = objectMapper.readTree(meResult.getResponse().getContentAsString())
+                .get("version").asLong();
+
         mockMvc.perform(put("/api/users/me/leagues")
                         .header("Authorization", bearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"leagueIds":["%s"]}
-                                """.formatted(lec.getId())))
+                                {"leagueIds":["%s"],"version":%d}
+                                """.formatted(lec.getId(), versionAfterGames)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.followedLeagues[0].slug").value("lec"));
 

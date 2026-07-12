@@ -11,6 +11,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -37,6 +38,19 @@ public class User {
 
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
+
+    /**
+     * Backs API-level optimistic concurrency for the follow-update endpoints, not just JPA's own
+     * flush-time check: two requests computed from a stale cached profile (two tabs, or a toggle
+     * fired before an earlier one's response lands) would otherwise silently overwrite each other,
+     * since each PUT is a fresh full-replace load-modify-save with no memory of what the client
+     * last saw. Callers must submit the version they last read; UserService compares it against
+     * this column before applying a follow change and rejects a mismatch as a 409 rather than
+     * quietly discarding one of the two updates.
+     */
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -91,6 +105,10 @@ public class User {
 
     public String getPasswordHash() {
         return passwordHash;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 
     public Instant getCreatedAt() {
