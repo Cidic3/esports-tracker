@@ -15,6 +15,8 @@ riot:
   esports-api-key: test-key
 steam:
   api-key: test-key
+cito:
+  api-key: test-key
 jwt:
   # HS384 requires a >= 48-byte secret; long-enough placeholder that's obviously not a real key.
   secret: test-secret-not-a-real-jwt-signing-key-just-for-tests-1234567890

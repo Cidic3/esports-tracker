@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './auth/ProtectedRoute'
 import { useAuth } from './auth/AuthContext'
+import { ApexMatchDayDetailPage } from './pages/ApexMatchDayDetailPage'
+import { ApexPage } from './pages/ApexPage'
 import { FeedPage } from './pages/FeedPage'
 import { LoginPage } from './pages/LoginPage'
 import { MatchDetailPage } from './pages/MatchDetailPage'
@@ -30,6 +32,8 @@ export default function App() {
         <Route path="/matches/:id" element={<MatchDetailPage />} />
         <Route path="/tournaments" element={<TournamentsPage />} />
         <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
+        <Route path="/apex" element={<ApexPage />} />
+        <Route path="/apex/:id" element={<ApexMatchDayDetailPage />} />
         <Route path="/teams" element={<TeamsPage />} />
         <Route path="/teams/:id" element={<TeamDetailPage />} />
         <Route element={<ProtectedRoute />}>

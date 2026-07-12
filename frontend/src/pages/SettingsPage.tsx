@@ -131,8 +131,8 @@ export function SettingsPage() {
 
 // Display order and labels for the tier groups ("SECONDARY" reads as national leagues).
 const TIER_GROUPS: { tier: TournamentTier; label: string; description: string }[] = [
-  { tier: 'INTERNATIONAL', label: 'International', description: 'Worlds, MSI and other cross-region events' },
-  { tier: 'PRIMARY', label: 'Primary leagues', description: 'The major regional leagues — LEC, LCK, LPL, LCS' },
+  { tier: 'INTERNATIONAL', label: 'International', description: 'Cross-region events — Worlds, MSI, ALGS Playoffs' },
+  { tier: 'PRIMARY', label: 'Primary leagues', description: 'The major regional leagues — LEC, LCK, ALGS regions' },
   { tier: 'SECONDARY', label: 'National leagues', description: 'Domestic and development leagues' },
 ]
 

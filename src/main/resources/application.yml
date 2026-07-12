@@ -37,6 +37,12 @@ steam:
   api-key: ${STEAM_API_KEY}
   base-url: https://api.steampowered.com/IDOTA2Match_570
 
+cito:
+  api-key: ${CITO_API_KEY}
+  # Third-party aggregator of official ALGS results (EA publishes no API of its own - see CLAUDE.md).
+  # Free tier: 500 calls/month. Sync makes exactly one call per tournaments-cron tick (~120/month).
+  base-url: https://api.citoapi.com/api/v1
+
 jwt:
   secret: ${JWT_SECRET}
   expiration-ms: 86400000 # 24h

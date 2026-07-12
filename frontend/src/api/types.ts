@@ -61,6 +61,50 @@ export interface TeamDetailResponse {
   liveMatches: MatchResponse[]
   recentMatches: MatchResponse[]
   upcomingMatches: MatchResponse[]
+  // Only ever non-empty for Apex Legends teams (their recent ALGS match day placements).
+  apexResults: ApexTeamRecentResultResponse[]
+}
+
+// ---- Apex Legends (ALGS) — Battle Royale match days, not head-to-head matches ----
+
+export interface ApexMatchDayResponse {
+  id: string
+  name: string
+  startsAt: string
+  status: EventStatus
+  tournamentId: string
+  tournamentName: string
+  leagueSlug: string
+  leagueName: string
+  gameSlug: string
+}
+
+export interface ApexGameResultResponse {
+  gameNumber: number
+  placement: number
+  kills: number
+  points: number
+}
+
+export interface ApexTeamResultResponse {
+  rank: number
+  totalPoints: number
+  team: TeamResponse
+  games: ApexGameResultResponse[]
+}
+
+// results is empty for UPCOMING days — a pending BR match day has no team list yet.
+export interface ApexMatchDayDetailResponse extends ApexMatchDayResponse {
+  results: ApexTeamResultResponse[]
+}
+
+export interface ApexTeamRecentResultResponse {
+  matchDayId: string
+  matchDayName: string
+  startsAt: string
+  tournamentName: string
+  rank: number
+  totalPoints: number
 }
 
 export interface LeagueResponse {
@@ -108,6 +152,8 @@ export interface StandingResponse {
   team: TeamResponse
 }
 
+// version: pass back unchanged on the next follow-update PUT - see useFollowGames/Teams/Leagues.
+// A 409 means it changed elsewhere (another tab, or a toggle fired before an earlier one landed).
 export interface UserResponse {
   id: string
   username: string
@@ -116,12 +162,14 @@ export interface UserResponse {
   followedGames: GameResponse[]
   followedLeagues: LeagueResponse[]
   followedTeams: TeamResponse[]
+  version: number
 }
 
 export interface FeedResponse {
   liveMatches: MatchResponse[]
   upcomingMatches: MatchResponse[]
   runningTournaments: TournamentResponse[]
+  apexMatchDays: ApexMatchDayResponse[]
 }
 
 export interface AuthResponse {
